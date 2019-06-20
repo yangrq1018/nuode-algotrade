@@ -47,6 +47,11 @@ class CDS:
         self.chip_dists = OrderedDict(self.chip_dists)
         self.prices = pd.Series(OrderedDict(sorted(self.prices.items(), key=lambda x: x[0])))
 
+    def get_price_on_date(self, date):
+        if date not in self.prices.index:
+            raise KeyError('Not a trading day in the concerning period {}'.format(date))
+        return self.prices[date]
+
     def dates(self):
         return self.prices.index
 
@@ -68,7 +73,7 @@ class CDS:
 
         rel = self.chip_dists[date].copy()
         if clip_factor:
-            logger.debug('Thresholding chips')
+            logger.debug('Threshold chips')
             if clip_factor < 0 or clip_factor > 1:
                 raise ValueError("Improper threshold, between 0 and 1")
             clip_factor = max(rel.values()) * clip_factor  # The filter is set to max(prob) * thresh

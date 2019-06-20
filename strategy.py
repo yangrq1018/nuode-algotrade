@@ -1,20 +1,21 @@
 """
-规则只做多，不做空，10等分初始资金，60天后平仓，只有平仓后可以继续买入
+规则只做多，不做空，M等分初始资金，RP天后平仓，只有平仓后可以继续买入
 """
 from collections import OrderedDict
+from emoji import emojize
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from chip import CDS
 from model import prepare_model
-from utils import get_dataframe, Parameters, TradingPeriodEnds
+from utils import get_dataframe, Parameters, TradingPeriodEnds, annualize
 
 RP = 60
 
 
 class Trader:
-    def __init__(self, trained_model, time_axis, fund_partition=10):
+    def __init__(self, trained_model, time_axis):
         """
         The trader needs a model to process the signals and produce trading decisions
         :param trained_model:
@@ -111,29 +112,29 @@ class Clock:
 
 
 class Broker:
-    def __init__(self, time_axis, init_balance, cash_partition=10):
+    def __init__(self, time_axis, init_balance, partition=10):
         """
 
         :param time_axis: a pandas DatetimeIndex, should cover up to 2019/6/12, the trading period
         :param init_balance:
         """
-        self.time_axis = time_axis
+        self._time_axis = time_axis
         self.cash_bal = init_balance
         self.holdings = 0
-        self.investment_cash_unit = init_balance / cash_partition
-        self.clock = 0
-        self.trader = None
-        self.market = None
-        self.trader = None
+        self.investment_cash_unit = init_balance / partition
+        self._clock = 0
+        self._trader = None
+        self._market = None
+        self._trader = None
 
-        self.leger = OrderedDict([(k, dict(long=None, short=None)) for k in self.time_axis])
+        self.leger = OrderedDict([(k, dict(long=None, short=None)) for k in self._time_axis])
 
     def register_trader_and_market(self, t: Trader, m: Market):
-        self.trader = t
-        self.market = m
+        self._trader = t
+        self._market = m
 
     def today(self):
-        return self.time_axis[self.clock]
+        return self._time_axis[self._clock]
 
     def proceed(self):
         """
@@ -143,26 +144,27 @@ class Broker:
         """
         today = self.today()
         # Ask trader
-        print('-----------------On trading day', self.today())
+        print('-------On trading day {}----------'.format(self.today().strftime('%Y-%m-%d')))
 
         # Decide short
-        short = self.trader.decide_short_action(today)
+        short = self._trader.decide_short_action(today)
 
         if short:
-            print('[Sell] {:.2f} units at ${}'.format(short, self.market.quote_price(today)))
-            self.cash_bal += self.market.quote_price(today) * short
+            print('[Sell] {:.2f} units at ${}'.format(short, self._market.quote_price(today)))
+            self.cash_bal += self._market.quote_price(today) * short
             self.holdings -= short
             self.leger[today]['short'] = short
 
-        buy = self.trader.decide_long_action(self.market.get_chip_stats(today))
+        buy = self._trader.decide_long_action(self._market.get_chip_stats(today))
         if buy:
             # Validate balance
             if self.cash_bal >= self.investment_cash_unit:
                 # buy
-                current_price = self.market.quote_price(today)
-                long_units = self.investment_cash_unit / self.market.quote_price(today)
+                current_price = self._market.quote_price(today)
+                # can only invest cash = investment_cash_unit
+                long_units = self.investment_cash_unit / self._market.quote_price(today)
 
-                print('[Purchase] {:.2f} units of index at ${}'.format(
+                print('[Long] {:.2f} units of index at ${}'.format(
                     long_units, current_price
                 ))
 
@@ -172,17 +174,20 @@ class Broker:
             else:
                 print('[Insufficient fund] on {}, deny long order'.format(self.today()))
 
-        self.clock += 1
+        self._clock += 1
 
-        if self.clock == len(self.time_axis):
+        if self._clock == len(self._time_axis):
             # if self.holdings != 0:
             # raise ValueError('we should have sold out all holdings, remain holdings={}'.format(self.holdings))
             raise TradingPeriodEnds('Trading period ends')
 
 
-if __name__ == '__main__':
-    split = '2016-03-01'
-    last_trading_day = '2019-06-12'
+def evaluate_strategy():
+    # The days before this date are training set
+    # The days on and after this date are the testing set
+    split = '2016-06-13'
+    last_trading_day = pd.Timestamp.strptime('2019-06-12', '%Y-%m-%d')
+    first_trading_day = pd.Timestamp.strptime(split, '%Y-%m-%d')
     fund_partition = 50
     initial_balance = 1000
 
@@ -190,15 +195,15 @@ if __name__ == '__main__':
     cds = CDS(df.index, df.CLOSE, df.TURN, 'IF')
 
     # Load from pickle instead of retraining
-    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=True,
+    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
                                           evaluate=True, **Parameters.standard)
 
     trading_period = cds.prices.index[cds.prices.index >= split]
     # Instantiate trader, market and broker
 
-    trader = Trader(model, trading_period, fund_partition=10)
+    trader = Trader(model, trading_period)
     market = Market(X_test, cds.prices)
-    broker = Broker(trading_period, init_balance=initial_balance, cash_partition=fund_partition)
+    broker = Broker(trading_period, init_balance=initial_balance, partition=fund_partition)
 
     broker.register_trader_and_market(trader, market)
     trader.register_broker(broker)
@@ -208,12 +213,32 @@ if __name__ == '__main__':
             broker.proceed()
         except TradingPeriodEnds as e:
             print(e)
-            print('Backtesting results:')
-            print('Remaining balance ${}'.format(broker.cash_bal))
-            print('Remaining holdings {} shares'.format(broker.holdings))
-            print('Accumulative net value ${}'.format(broker.cash_bal / initial_balance))
-            print('Accumulative return in {} days')
+            print(emojize('>:chart_with_upwards_trend::moneybag::dollar: Back testing results', use_aliases=True))
+            print('剩余现金 ${:.2f}'.format(broker.cash_bal))
+            print('剩余股票 {:.6f} shares'.format(broker.holdings))
+            print('累计净值 ${}'.format(broker.cash_bal / initial_balance))
+
+            ac_return = broker.cash_bal / initial_balance - 1
+            t_days = (last_trading_day - first_trading_day).days
+            years = t_days / 360
+            an_return = annualize(ac_return, years)
+            bm_ac_return = cds.prices[last_trading_day] / cds.prices[first_trading_day] - 1
+            bm_an_return = annualize(bm_ac_return, years)
+            excess_return = an_return - bm_an_return
+
+
+            print('时间区间\t from {} to {}, {:.2f} years'.format(
+                first_trading_day.strftime('%Y-%m-%d'),
+                last_trading_day.strftime('%Y-%m-%d'),
+                years
+            ))
+            print('累计收益率\t {:.2f}%'.format(ac_return * 100))
+            print('年化收益率\t {:.2f}%'.format(an_return * 100))
+            print('标的累计收益率\t {:.2f}%'.format(bm_ac_return * 100))
+            print('标的年化收益率\t {:.2f}%'.format(bm_an_return * 100))
+            print('超额收益率\t {:.2f}%'.format(excess_return * 100))
             break
+
 
 
 # todo Probability based confidence to enhance the strategy
@@ -241,17 +266,20 @@ def plot_signals(prices, signals, name, rp):
     plt.show()
 
 
-def sample_signals():
-    split = '2017-03-01'
-    df = get_dataframe('IF')
-    cds = CDS(df.index, df.CLOSE, df.TURN, 'IF')
+def sample_signals(split, name):
+    df = get_dataframe(name)
+    cds = CDS(df.index, df.CLOSE, df.TURN, name)
     model, X_test, y_test = prepare_model(cds, split_date=split, model_type='classification',
                                           evaluate=True, **Parameters.standard)
     # A trader needs a trained model
-    trader = Trader(trained_model=model)
+    trader = Trader(trained_model=model, time_axis=None)
     signals = trader.compute_signals(X_test)
 
     # Get prices
     prices = cds.prices[cds.prices.index >= split]
     plt.xticks(rotation=45)
     plot_signals(prices, signals, 'IF', 60)
+
+
+if __name__ == '__main__':
+    evaluate_strategy()

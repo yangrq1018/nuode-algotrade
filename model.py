@@ -90,9 +90,8 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     return Xd, yd
 
 
-# noinspection PyIncorrectDocstring
-def prepare_model(cds, split_date='2018-01-01', model_type='classification', load_from_disk=False,
-    evaluate=False, **kwargs):
+def prepare_model(cds, split_date='2018-01-01', model_type='classification', pkl_file=None, load_from_disk=False,
+    evaluate=False, save_to_disk=False, **kwargs):
     """
     Return X_test, y_test along side the trained model
     :param cds:
@@ -110,8 +109,10 @@ def prepare_model(cds, split_date='2018-01-01', model_type='classification', loa
     y_test = yd[yd.index >= split_date]
 
     if load_from_disk:
-        model = pickle.load(open('sample_model.pkl', 'rb'))
+        print('Loading model from disk, file = {}'.format(pkl_file if pkl_file else 'sample_model.pkl'))
+        model = pickle.load(open('{}.pkl'.format(pkl_file if pkl_file else 'sample_model.pkl'), 'rb'))
     else:
+        print('Training new {} model, split date={}'.format(model_type, split_date))
         if model_type == 'regression':
             model = RandomForestRegressor()
         else:
@@ -119,8 +120,11 @@ def prepare_model(cds, split_date='2018-01-01', model_type='classification', loa
 
         model.fit(X_train.values, y_train.values)
 
-
     print(model)
+    if save_to_disk:
+        pickle.dump(model, open('pretrained/{}.pkl'.format(
+            cds.name+split_date + model_type + str(kwargs['return_period'])
+        ), 'wb'))
 
     if evaluate:
         if model_type == 'classification':

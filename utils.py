@@ -63,3 +63,7 @@ TICKER = dict(IF='399300.SZ', IC='399905.SZ', IH='000016.SH')
 
 class TradingPeriodEnds(Exception):
     pass
+
+
+def annualize(rt, n_years):
+    return (1 + rt) ** (1/n_years) - 1
