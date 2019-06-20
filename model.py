@@ -1,68 +1,11 @@
 import pickle
 from collections import OrderedDict
-from itertools import product
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score, accuracy_score
-
-from chip_distribution import CDS
-
-DATA_DIR = r"C:\Users\admin\Desktop\新建文件夹\筹码分布策略\data"
-INDICES = ['IF', 'IC', 'IH']
-CH_NAME = dict(IF='沪深300', IC='中证500', IH='上证50')
-TICKER = dict(IF='399300.SZ', IC='399905.SZ', IH='000016.SH')
-
-
-# Helper functions
-def get_dataframe(index):
-    """
-    For IF (沪深300期货) as example, 2005-4-8 is the first day when both turn and close price data
-    is available.
-    :param index:
-    :return:
-    """
-    TICKER = dict(IF='399300.SZ', IC='399905.SZ', IH='000016.SH')
-    URL = DATA_DIR + r'\\' + TICKER[index] + '.csv'
-    df = pd.read_csv(URL, index_col=0, parse_dates=[0], engine='python').drop('DEALNUM', axis=1).dropna(
-        subset=['CLOSE', 'TURN'])
-    df.TURN = df.TURN / 100  # Percentage turnover rate
-    print('Get dataframe for {}, shape={}'.format(index, df.shape))
-    return df
-
-
-def neighbor_percentage(cp, factor, distribution):
-    prob_sum = 0
-    for k, v in distribution.items():
-        if cp * (1 - factor) < k < cp * (1 + factor):
-            prob_sum += v
-    return prob_sum
-
-
-def kurt(distribution):
-    mean = sum([k * v for k, v in distribution.items()])
-    m4 = sum([probability * (price - mean) ** 4 for price, probability in distribution.items()])
-    m2 = sum([probability * (price - mean) ** 2 for price, probability in distribution.items()])
-    return m4 / (m2 ** 2) - 3
-
-
-def k_day_return_afterward(prices: pd.Series, K):
-    """
-    :param prices: a pandas series
-    :param K:
-    :return: the return series, with leftmost date of the window as labels
-    """
-
-    return prices.rolling(K).apply(lambda x: (x[-1] - x[0]) / x[0]).shift(-(K - 1)).dropna()
-
-
-def profit_reigion(cd, current_price):
-    prob = 0
-    for k, v in cd.items():
-        if k > current_price:
-            prob += v
-    return prob
+from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region
 
 
 def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
@@ -77,7 +20,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     :return: X, y in pandas dataframe and series, already aligned along time and clipped with the same length
     """
 
-    def lookback_hist_prices_window(cds_object, today, N):
+    def _compute_back_price_window(cds_object, today, N):
         # Retrieve past prices window (None -> MAX)
         idx = np.where(cds_object.prices.index == today)[0][0]
 
@@ -99,7 +42,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
 
         current_price = cds_object.prices[d]
 
-        past_prices_window = lookback_hist_prices_window(cds_object, d, back_price_window)
+        past_prices_window = _compute_back_price_window(cds_object, d, back_price_window)
 
         if len(past_prices_window) < 2:
             continue
@@ -115,7 +58,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
         # 当前价格筹码集中度
         cp_neighbor_perc = neighbor_percentage(current_price, neighbor_factor, clipped_cd)
         # 盈利比例
-        profit_prob = profit_reigion(clipped_cd, current_price)
+        profit_prob = profit_region(clipped_cd, current_price)
 
         Xd.append((d,
                    [cp_rel_pos_hist, mc_rel_pos_hist, kurtosis, cp_neighbor_perc, profit_prob]))
@@ -143,18 +86,15 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
         print('Dump to disk')
         pickle.dump(Xd, open('IF_X.pkl', 'wb'))
         pickle.dump(Xd, open('IF_y.pkl', 'wb'))
+
     return Xd, yd
 
 
-# SAMPLE_DATE = ['2010-04-08', '2005-10-20', '2008-07-25']
-# for D in SAMPLE_DATE:
-#     cd.plot_dist(D, thresh=0.01, bin_size=10)
-#
-
-
 # noinspection PyIncorrectDocstring
-def prepare_model(cds, split_date='2018-01-01', model_type='regression', evaluate=False, **kwargs):
+def prepare_model(cds, split_date='2018-01-01', model_type='classification', load_from_disk=False,
+    evaluate=False, **kwargs):
     """
+    Return X_test, y_test along side the trained model
     :param cds:
     :param split_date: the date before which the market data will be used to train the model, after which the market
     data will be used to test against the strategy based on the model
@@ -169,15 +109,20 @@ def prepare_model(cds, split_date='2018-01-01', model_type='regression', evaluat
     y_train = yd[yd.index < split_date]
     y_test = yd[yd.index >= split_date]
 
-    if model_type == 'regression':
-        model = RandomForestRegressor()
+    if load_from_disk:
+        model = pickle.load(open('sample_model.pkl', 'rb'))
     else:
-        model = RandomForestClassifier()
+        if model_type == 'regression':
+            model = RandomForestRegressor()
+        else:
+            model = RandomForestClassifier()
+
+        model.fit(X_train.values, y_train.values)
+
+
     print(model)
 
-    model.fit(X_train.values, y_train.values)
     if evaluate:
-
         if model_type == 'classification':
             accuracy_s = accuracy_score(y_test.values, model.predict(X_test.values))
             print('----->  accuracy score:', accuracy_s)
@@ -191,10 +136,9 @@ def prepare_model(cds, split_date='2018-01-01', model_type='regression', evaluat
             r2 = r2_score(y_test.values, prediction)
             print('R2 score', r2)
             plt.title(cds.name + ' ' + str(kwargs) + ' r2={:.2f}'.format(r2))
-            # plt.savefig('evaluation/{}.png'.format(parameters))
             plt.show()
-    return model, X_test, y_test
 
+    return model, X_test, y_test
 
 # cv_book = []
 #
@@ -219,26 +163,26 @@ def prepare_model(cds, split_date='2018-01-01', model_type='regression', evaluat
 # cv_book = pd.DataFrame(cv_book, columns=['股指', '参数1', '参数2', '参数3', '参数4', '得分'])
 # cv_book.to_excel('调参结果.xlsx', index=False)
 
-
-for SPLIT_DATE in ['2016-01-01', '2017-01-01', '2018-01-01']:
-    for C_TICKER in ['IF', 'IC', 'IH']:
-        rps = np.arange(2, 61, step=5)
-        stock_index = get_dataframe(C_TICKER)
-        cds = CDS(stock_index.index, stock_index.CLOSE, stock_index.TURN, name=C_TICKER)
-        accu_scores = []
-        for rp in rps:
-            print('rp:', rp)
-            parameters = dict(neighbor_factor=0.01, return_period=rp, clipping_factor=0.005, back_price_window=60)
-            model, X_test, y_test = prepare_model(cds, evaluate=False, split_date=SPLIT_DATE,
-                                                  model_type='classification',
-                                                  **parameters)
-            print(y_test.shape, model.predict(X_test).shape)
-            score = accuracy_score(y_test, model.predict(X_test))
-            print('Score:', score)
-            accu_scores.append(score)
-
-        plt.plot(rps, accu_scores)
-        plt.xlabel('Forecasting period')
-        plt.title(C_TICKER + ' SD:' + SPLIT_DATE)
-        plt.ylabel('Accuracy score')
-        plt.show()
+#
+# for SPLIT_DATE in ['2016-01-01', '2017-01-01', '2018-01-01']:
+#     for C_TICKER in ['IF', 'IC', 'IH']:
+#         rps = np.arange(2, 61, step=5)
+#         stock_index = get_dataframe(C_TICKER)
+#         cds = CDS(stock_index.index, stock_index.CLOSE, stock_index.TURN, name=C_TICKER)
+#         accu_scores = []
+#         for rp in rps:
+#             print('rp:', rp)
+#             parameters = dict(neighbor_factor=0.01, return_period=rp, clipping_factor=0.005, back_price_window=60)
+#             model, X_test, y_test = prepare_model(cds, evaluate=False, split_date=SPLIT_DATE,
+#                                                   model_type='classification',
+#                                                   **parameters)
+#             print(y_test.shape, model.predict(X_test).shape)
+#             score = accuracy_score(y_test, model.predict(X_test))
+#             print('Score:', score)
+#             accu_scores.append(score)
+#
+#         plt.plot(rps, accu_scores)
+#         plt.xlabel('Forecasting period')
+#         plt.title(C_TICKER + ' SD:' + SPLIT_DATE)
+#         plt.ylabel('Accuracy score')
+#         plt.show()

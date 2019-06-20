@@ -5,13 +5,12 @@ Created on Thu Jun 13 10:16:36 2019
 @author: admin
 """
 
-
 from collections import OrderedDict
 from datetime import datetime
 import matplotlib.pyplot as plt
 from logger import logger
-import numpy as np
 import pandas as pd
+
 
 class CDS:
     def __init__(self, date, price, turn, name):
@@ -67,7 +66,6 @@ class CDS:
             # print(date, type(list(self.chip_dist.keys())[0]))
             raise ValueError('Not a trading day:', date)
 
-
         rel = self.chip_dists[date].copy()
         if clip_factor:
             logger.debug('Thresholding chips')
@@ -87,7 +85,7 @@ class CDS:
             # aggregate over the price level by ``bin_sze``
             # for index, we sum up chips in each 1 point
 
-            rel = OrderedDict(sorted(rel.items(), key=lambda x:x[0]))
+            rel = OrderedDict(sorted(rel.items(), key=lambda x: x[0]))
 
             new_rel = dict()
             for k, v in rel.items():
@@ -100,13 +98,12 @@ class CDS:
         return rel
 
     def plot_dist(self, date_str, **kwargs):
-        '''
+        """
         TODO, filter for non-significant chips at certain price levels, so that we can
         enlarge the plot and get a clear shape
         :param date_str:
         :return:
-        '''
-
+        """
 
         date = datetime.strptime(date_str, '%Y-%m-%d')
         dist = self.get_chip_dist(date_str, **kwargs)
@@ -125,11 +122,9 @@ class CDS:
         # Add that day's price as cut off
         plt.axhline(y=current_price, c='k', ls='--')
 
-
         plt.xlabel('Chip')
         plt.ylabel('Price')
         plt.legend(loc='best')
         plt.title('Chip distribution on {}'.format(date_str))
         plt.show()
         return plt.gca()
-

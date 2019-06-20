@@ -1,5 +1,5 @@
-from predict_model import get_dataframe
-from chip_distribution import CDS
+from utils import get_dataframe
+from chip import CDS
 
 
 IF = get_dataframe('IF')
