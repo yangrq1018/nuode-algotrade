@@ -9,7 +9,7 @@ from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_regi
 
 
 def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
-               back_price_window='max', save_df=False, binary=False):
+               back_price_window='max', save_df=False):
     """
     :param save_df:
     :param back_price_window:
@@ -22,7 +22,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
 
     def _compute_back_price_window(cds_object, today, N):
         # Retrieve past prices window (None -> MAX)
-        idx = np.where(cds_object.prices.index == today)[0][0]
+        idx = cds_object.prices.index.get_loc(today)
 
         if N == 'max':
             return cds_object.prices[:idx + 1]
@@ -73,10 +73,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     # Align X and y
     common_index = Xd.index.intersection(yd.index)
     Xd = Xd.loc[common_index]
-    yd = yd[common_index]
-    if binary:
-        # Convert return to 涨/跌
-        yd = yd.apply(lambda x: 1 if x > 0 else 0)
+    yd = yd[common_index].apply(lambda x: 1 if x > 0 else 0)
 
     print('X&y shape:', Xd.shape, yd.shape)
     assert Xd.shape[0] == yd.shape[0]
@@ -90,7 +87,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     return Xd, yd
 
 
-def prepare_model(cds, split_date='2018-01-01', model_type='classification', pkl_file=None, load_from_disk=False,
+def prepare_model(cds, split_date='2018-01-01', pkl_file=None, load_from_disk=False,
     evaluate=False, save_to_disk=False, **kwargs):
     """
     Return X_test, y_test along side the trained model
@@ -101,7 +98,7 @@ def prepare_model(cds, split_date='2018-01-01', model_type='classification', pkl
     :param back_price_window
     :return: the trained model, inputs and actual returns in the evaluation period
     """
-    Xd, yd = compute_Xy(cds, binary=(model_type == 'classification'), **kwargs)
+    Xd, yd = compute_Xy(cds, **kwargs)
 
     X_train = Xd[Xd.index < split_date]
     X_test = Xd[Xd.index >= split_date]
@@ -112,35 +109,19 @@ def prepare_model(cds, split_date='2018-01-01', model_type='classification', pkl
         print('Loading model from disk, file = {}'.format(pkl_file if pkl_file else 'sample_model.pkl'))
         model = pickle.load(open('{}.pkl'.format(pkl_file if pkl_file else 'sample_model.pkl'), 'rb'))
     else:
-        print('Training new {} model, split date={}'.format(model_type, split_date))
-        if model_type == 'regression':
-            model = RandomForestRegressor()
-        else:
-            model = RandomForestClassifier()
-
+        # Fix random state so we will have a constant accuracy score every time in debugging
+        model = RandomForestClassifier(random_state=47)
         model.fit(X_train.values, y_train.values)
 
     print(model)
     if save_to_disk:
         pickle.dump(model, open('pretrained/{}.pkl'.format(
-            cds.name+split_date + model_type + str(kwargs['return_period'])
+            cds.name+split_date + 'RFC' + str(kwargs['return_period'])
         ), 'wb'))
 
     if evaluate:
-        if model_type == 'classification':
-            accuracy_s = accuracy_score(y_test.values, model.predict(X_test.values))
-            print('----->  accuracy score:', accuracy_s)
-        else:
-            plt.figure()
-            y_test.plot(label='Actual {}-day return'.format(kwargs['return_period']))
-            prediction = model.predict(X_test.values)
-            plt.plot(y_test.index, prediction, label="Predicted {}-day return".format(kwargs['return_period']))
-            plt.legend()
-            plt.axhline(y=0, c='k', lw=0.5)
-            r2 = r2_score(y_test.values, prediction)
-            print('R2 score', r2)
-            plt.title(cds.name + ' ' + str(kwargs) + ' r2={:.2f}'.format(r2))
-            plt.show()
+        accuracy_s = accuracy_score(y_test.values, model.predict(X_test.values))
+        print('----->  accuracy score:', accuracy_s)
 
     return model, X_test, y_test
 

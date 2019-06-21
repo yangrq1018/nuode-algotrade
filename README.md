@@ -13,3 +13,27 @@
 标的年化收益率	 6.29%
 超额收益率	 5.49%
 ```
+
+## Todo
+- 止损
+- 交易成本，中金所网站有
+- 概率引入 (call `predict_proba`)
+- 收入周期阶段
+- 加入做空
+- 绘制建仓持仓图示，净资产曲线和持仓曲线
+
+
+Remove all 50-50 probability and choose inaction
+
+
+# 主要参数
+
+- Model
+    - Clip factor
+    - Neighbor factor
+    - Length of back price window (Relative high/low)
+    - Return period
+    - Train/Test partition
+- Trading
+    - Tolerance
+    - Initial fund partition (spending scheme)
