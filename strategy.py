@@ -20,7 +20,6 @@ class Trader:
         """
         The trader needs a model to process the signals and produce trading decisions
         :param trained_model:
-        :param fund_partition: split initial_balance in X equal slices, each long position is one slice
         """
         self.model = trained_model
         self.time_axis = time_axis
@@ -36,9 +35,6 @@ class Trader:
         Forbid purchasing in the last 60 days, we must liquidate all open positions at the end.
         As return after June 12 is not known.
         last RP day, close existing position only.
-        :param prob_regulator: an integer between 0 and 1, the lower it is, the stronger confidence we need
-        to open a position
-        :param today: a Timestamp
         :param inputs: the indicators for today
         :return: -1 for inaction, 1 for long signal, 0 for short signal
         """
@@ -110,18 +106,6 @@ class Market:
         return self._prices[day]
 
 
-class Clock:
-    def __init__(self, time_axis):
-        now = 0
-        self._time_axis = time_axis
-
-    def forward(self):
-        self.now += 1
-
-    def today(self):
-        return self._time_axis[self.now]
-
-
 class Broker:
     """
     中金所 2019年4月公告，交易手续费为成交金额的万分之零点二三，平今仓手续费为成交金额的万分之三点四五
@@ -135,13 +119,15 @@ class Broker:
         :param init_balance:
         """
 
+        # Rate assumptions
         self.commission_rate = 0.23 / 10000
+        self.rf = 2.648 / 100  # 一年期国债收益率
 
         self._time_axis = time_axis
         self.cash_bal = init_balance
         self.short_proceed = 0  # short share proceed account
         self.deposit = 0  # Short deposit account
-        self.open_close_count = 0 # Open/Close transaction
+        self.open_close_count = 0  # Open/Close transaction
 
         self.holdings = 0
         self.obligations = 0
@@ -217,7 +203,6 @@ class Broker:
                 self.leger['loss_total'] += notional_amt - self.investment_cash_unit
             self.open_close_count += 1
 
-
         cover = self._trader.close_short(today)
         if cover:
             print('[Cover] {:.2f} units at ${}'.format(cover, self._market.quote_price(today)))
@@ -243,7 +228,6 @@ class Broker:
                 self.leger['loss_count'] += 1
                 self.leger['loss_total'] += notional_amt - self.investment_cash_unit
             self.open_close_count += 1
-
 
         # New position
         judgement = self._trader.decide(self._market.get_chip_stats(today))
@@ -312,12 +296,24 @@ def mdd(net_worths):
 
     return np.min([dd(net_worths[s:]) for s in net_worths.index])
 
+def sharpe_ratio(series, rf, annualized_return=None):
+    """
 
-def evaluate(broker, cds, split, initial_balance, show=[]):
+    :param series: array-like for prices
+    :param rf:
+    :param an_return:
+    :return:
+    """
+    daily_returns = series.rolling(2).apply(lambda x: (x[1] - x[0]) / x[0], raw=False)
+    annual_vol = np.std(daily_returns) * np.sqrt(245)
+    return (annualized_return - rf) / annual_vol
+
+
+def evaluate(broker, market, cds, split, initial_balance, show=[]):
     last_trading_day = pd.Timestamp.strptime('2019-06-12', '%Y-%m-%d')
     first_trading_day = pd.Timestamp.strptime(split, '%Y-%m-%d')
 
-    print(emojize('>Back testing results', use_aliases=True))
+    print(emojize('>:chart_with_upwards_trend:Back testing results', use_aliases=True))
 
     print('剩余现金 ${:.2f}'.format(broker.cash_bal))
     print('剩余抵押金 ${:.2f}'.format(broker.deposit))
@@ -336,14 +332,20 @@ def evaluate(broker, cds, split, initial_balance, show=[]):
     excess_return = an_return - bm_an_return
     max_drawdown = mdd(broker.leger['net_worth'])
     win_ratio = broker.leger['win_count'] / (broker.leger['win_count'] + broker.leger['loss_count'])
-    gain_loss_ratio = (broker.leger['gain_total']/broker.leger['win_count']) /\
-                      (-(broker.leger['loss_total']/broker.leger['loss_count']))
+    gain_loss_ratio = (broker.leger['gain_total'] / broker.leger['win_count']) / \
+                      (-(broker.leger['loss_total'] / broker.leger['loss_count']))
+
+    # Sharpe ratio
+    sr = sharpe_ratio(broker.leger['net_worth'], rf=broker.rf, annualized_return=an_return)
+    bm_sr = sharpe_ratio(market._prices, broker.rf, bm_an_return)
+
 
     print('时间区间\t from {} to {}, {:.2f} years'.format(
         first_trading_day.strftime('%Y-%m-%d'),
         last_trading_day.strftime('%Y-%m-%d'),
         years
     ))
+
     print('累计收益率\t {:.2f}%'.format(ac_return * 100))
     print('年化收益率\t {:.2f}%'.format(an_return * 100))
     print('标的累计收益率\t {:.2f}%'.format(bm_ac_return * 100))
@@ -352,7 +354,10 @@ def evaluate(broker, cds, split, initial_balance, show=[]):
     print('最大回撤\t\t {:.2f}%'.format(max_drawdown * 100))
     print('胜率\t\t {:.2f}%'.format(win_ratio * 100))
     print('赔率\t\t {:.2f}%'.format(gain_loss_ratio * 100))
-    print('{} = {}(win) + {}(loss)'.format(broker.open_close_count, broker.leger['win_count'], broker.leger['loss_count']))
+    print('策略夏普比率\t: {:.2f}'.format(sr))
+    print('标的夏普比率\t: {:.2f}'.format(bm_sr))
+    print('{} positions = {}(win) + {}(loss)'.format(broker.open_close_count, broker.leger['win_count'],
+                                                     broker.leger['loss_count']))
 
     if 'net_worth_curve' in show:
         broker.leger['net_worth'].plot()
@@ -377,7 +382,7 @@ def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance
             broker.proceed()
         except TradingPeriodEnds as e:
             print(e)
-            return evaluate(broker, cds, split, initial_balance, show=show)
+            return evaluate(broker, market, cds, split, initial_balance, show=show)
 
 
 def er_mdd():

@@ -1,6 +1,8 @@
 import pandas as pd
+import os
 
-DATA_DIR = r"C:\Users\admin\Desktop\新建文件夹\筹码分布策略\data"
+# DATA_DIR = r"C:\Users\admin\Desktop\新建文件夹\筹码分布策略\data"
+DATA_DIR = "data"
 
 
 def get_dataframe(index):
@@ -11,7 +13,7 @@ def get_dataframe(index):
     :return:
     """
     TICKER = dict(IF='399300.SZ', IC='399905.SZ', IH='000016.SH')
-    URL = DATA_DIR + r'\\' + TICKER[index] + '.csv'
+    URL = DATA_DIR + os.sep + TICKER[index] + '.csv'
     df = pd.read_csv(URL, index_col=0, parse_dates=[0], engine='python').drop('DEALNUM', axis=1).dropna(
         subset=['CLOSE', 'TURN'])
     df.TURN = df.TURN / 100  # Percentage turnover rate
