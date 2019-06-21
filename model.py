@@ -1,15 +1,30 @@
 import pickle
 from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score, accuracy_score
-from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+from chip import CDS
+from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region, get_dataframe, Parameters
+
+
+def get_model_cds_X_test(split):
+    # The days before this date are training set
+    # The days on and after this date are the testing set
+    df = get_dataframe('IF')
+    cds = CDS(df.index, df.CLOSE, df.TURN, 'IF')
+
+    # Load from pickle instead of retraining
+    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
+                                          evaluate=True, **Parameters.standard)
+
+    return model, cds, X_test
 
 
 def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
-               back_price_window='max', save_df=False):
+               back_price_window='max'):
     """
     :param save_df:
     :param back_price_window:
@@ -78,17 +93,11 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     print('X&y shape:', Xd.shape, yd.shape)
     assert Xd.shape[0] == yd.shape[0]
 
-    # Save to future use
-    if save_df:
-        print('Dump to disk')
-        pickle.dump(Xd, open('IF_X.pkl', 'wb'))
-        pickle.dump(Xd, open('IF_y.pkl', 'wb'))
-
     return Xd, yd
 
 
 def prepare_model(cds, split_date='2018-01-01', pkl_file=None, load_from_disk=False,
-    evaluate=False, save_to_disk=False, **kwargs):
+                  evaluate=False, save_to_disk=False, **kwargs):
     """
     Return X_test, y_test along side the trained model
     :param cds:
@@ -116,7 +125,7 @@ def prepare_model(cds, split_date='2018-01-01', pkl_file=None, load_from_disk=Fa
     print(model)
     if save_to_disk:
         pickle.dump(model, open('pretrained/{}.pkl'.format(
-            cds.name+split_date + 'RFC' + str(kwargs['return_period'])
+            cds.name + split_date + 'RFC' + str(kwargs['return_period'])
         ), 'wb'))
 
     if evaluate:

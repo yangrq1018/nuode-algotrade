@@ -1,7 +1,7 @@
+import pandas as pd
 from matplotlib import pyplot as plt
 
 from chip import CDS
-import pandas as pd
 from model import prepare_model
 from utils import get_dataframe, Parameters
 
@@ -17,6 +17,7 @@ def compute_signals(model, X_test):
 
     # zip predictions to dates
     return pd.Series(data=predictions, index=X_test.index)
+
 
 def sample_signals(split, name):
     def plot_signals(prices, signals, name, rp):
@@ -39,6 +40,7 @@ def sample_signals(split, name):
         plt.ylabel('Price')
         plt.legend(loc='best')
         plt.show()
+
     df = get_dataframe(name)
     cds = CDS(df.index, df.CLOSE, df.TURN, name)
     model, X_test, y_test = prepare_model(cds, split_date=split,

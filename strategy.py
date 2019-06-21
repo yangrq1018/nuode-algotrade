@@ -1,14 +1,14 @@
 """
 规则只做多，不做空，M等分初始资金，RP天后平仓，只有平仓后可以继续买入
 """
-from emoji import emojize
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 import pandas as pd
+from emoji import emojize
 from sklearn.ensemble import RandomForestClassifier
 
-from utils import TradingPeriodEnds, annualize, get_model_cds_X_test
+from model import get_model_cds_X_test
+from utils import TradingPeriodEnds, annualize
 
 RP = 60
 
@@ -123,6 +123,10 @@ class Clock:
 
 
 class Broker:
+    """
+    中金所 2019年4月公告，交易手续费为成交金额的万分之零点二三，平今仓手续费为成交金额的万分之三点四五
+    """
+
     def __init__(self, time_axis, init_balance, partition=10):
         """
         For short positions, cover after 60 days. On date 59, draw proceed, buy back share. Return deposit to cash
@@ -130,10 +134,14 @@ class Broker:
         :param time_axis: a pandas DatetimeIndex, should cover up to 2019/6/12, the trading period
         :param init_balance:
         """
+
+        self.commission_rate = 0.23 / 10000
+
         self._time_axis = time_axis
         self.cash_bal = init_balance
         self.short_proceed = 0  # short share proceed account
         self.deposit = 0  # Short deposit account
+        self.open_close_count = 0 # Open/Close transaction
 
         self.holdings = 0
         self.obligations = 0
@@ -149,9 +157,15 @@ class Broker:
         self.leger = dict()
         self.leger['long'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['sell'] = pd.Series(data=np.float64(0), index=self._time_axis)
+        self.leger['long_total'] = np.float64(0)
+        self.leger['short_total'] = np.float64(0)
         self.leger['short'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['cover'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['net_worth'] = pd.Series(data=np.float64(0), index=self._time_axis)
+        self.leger['win_count'] = np.int64(0)
+        self.leger['gain_total'] = np.float64(0)
+        self.leger['loss_count'] = np.int64(0)
+        self.leger['loss_total'] = np.float64(0)
 
     def register_trader_and_market(self, t: Trader, m: Market):
         self._trader = t
@@ -185,9 +199,24 @@ class Broker:
         sell = self._trader.close_long(today)
         if sell:
             print('[Sell] {:.2f} units at ${}'.format(sell, self._market.quote_price(today)))
-            self.cash_bal += self._market.quote_price(today) * sell
+            notional_amt = self._market.quote_price(today) * sell
+            self.cash_bal += notional_amt
             self.holdings -= sell
             self.leger['sell'][today] = sell
+
+            commission = notional_amt * self.commission_rate
+            self.cash_bal -= commission
+            print('[Commission charge] ${:.8f}'.format(commission))
+
+            # Determine win or loss
+            if notional_amt >= self.investment_cash_unit:
+                self.leger['win_count'] += 1
+                self.leger['gain_total'] += notional_amt - self.investment_cash_unit
+            else:
+                self.leger['loss_count'] += 1
+                self.leger['loss_total'] += notional_amt - self.investment_cash_unit
+            self.open_close_count += 1
+
 
         cover = self._trader.close_short(today)
         if cover:
@@ -198,8 +227,23 @@ class Broker:
             self.cash_bal += self.investment_cash_unit * 2
 
             # Buy back stock
-            self.cash_bal -= self._market.quote_price(today) * cover
+            notional_amt = self._market.quote_price(today) * cover
+            if self.cash_bal < notional_amt:
+                raise ValueError('Insufficient cash to cover short position')
+            self.cash_bal -= notional_amt
             self.obligations -= cover
+            commission = notional_amt * self.commission_rate
+            self.cash_bal -= commission
+            print('[Commission charge] ${:.8f}'.format(commission))
+
+            if notional_amt <= self.investment_cash_unit:
+                self.leger['win_count'] += 1
+                self.leger['gain_total'] += notional_amt - self.investment_cash_unit
+            else:
+                self.leger['loss_count'] += 1
+                self.leger['loss_total'] += notional_amt - self.investment_cash_unit
+            self.open_close_count += 1
+
 
         # New position
         judgement = self._trader.decide(self._market.get_chip_stats(today))
@@ -219,6 +263,11 @@ class Broker:
                 self.cash_bal -= self.investment_cash_unit
                 self.holdings += self.investment_cash_unit / current_price
                 self.leger['long'][today] = long_units
+
+                # Commission charge
+                commission = self.investment_cash_unit * self.commission_rate
+                self.cash_bal -= commission
+                print('[Commission charge] ${:.8f}'.format(commission))
             else:
                 print('[Insufficient fund] on {}, deny long order'.format(self.today()))
 
@@ -235,6 +284,12 @@ class Broker:
                 self.short_proceed += self.investment_cash_unit
 
                 self.leger['short'][today] = short_units
+
+                commission = self.investment_cash_unit * self.commission_rate
+                self.cash_bal -= commission
+                print('[Commission charge] ${:.8f}'.format(commission))
+            else:
+                print('[Insufficient fund] on {}, deny short order'.format(self.today()))
 
         # record net worth on leger
         self.leger['net_worth'][today] = self.net_worth()
@@ -280,6 +335,9 @@ def evaluate(broker, cds, split, initial_balance, show=[]):
     bm_an_return = annualize(bm_ac_return, years)
     excess_return = an_return - bm_an_return
     max_drawdown = mdd(broker.leger['net_worth'])
+    win_ratio = broker.leger['win_count'] / (broker.leger['win_count'] + broker.leger['loss_count'])
+    gain_loss_ratio = (broker.leger['gain_total']/broker.leger['win_count']) /\
+                      (-(broker.leger['loss_total']/broker.leger['loss_count']))
 
     print('时间区间\t from {} to {}, {:.2f} years'.format(
         first_trading_day.strftime('%Y-%m-%d'),
@@ -291,7 +349,10 @@ def evaluate(broker, cds, split, initial_balance, show=[]):
     print('标的累计收益率\t {:.2f}%'.format(bm_ac_return * 100))
     print('标的年化收益率\t {:.2f}%'.format(bm_an_return * 100))
     print('超额年化收益率\t {:.2f}%'.format(excess_return * 100))
-    print('最大回撤\t {:.2f}%'.format(max_drawdown * 100))
+    print('最大回撤\t\t {:.2f}%'.format(max_drawdown * 100))
+    print('胜率\t\t {:.2f}%'.format(win_ratio * 100))
+    print('赔率\t\t {:.2f}%'.format(gain_loss_ratio * 100))
+    print('{} = {}(win) + {}(loss)'.format(broker.open_close_count, broker.leger['win_count'], broker.leger['loss_count']))
 
     if 'net_worth_curve' in show:
         broker.leger['net_worth'].plot()
@@ -317,6 +378,7 @@ def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance
         except TradingPeriodEnds as e:
             print(e)
             return evaluate(broker, cds, split, initial_balance, show=show)
+
 
 def er_mdd():
     split = '2016-06-13'
@@ -350,7 +412,8 @@ if __name__ == '__main__':
     fund_partition = 50
     initial_balance = 1000
 
-    simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, 0.8, show=['net_worth_curve'])
+    simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, 0.8,
+                      show=[])
 
     # er_mdd()
     # sample_signals('2016-06-13', 'IF')

@@ -7,9 +7,11 @@ Created on Thu Jun 13 10:16:36 2019
 
 from collections import OrderedDict
 from datetime import datetime
+
 import matplotlib.pyplot as plt
-from logger import logger
 import pandas as pd
+
+from logger import logger
 
 
 class CDS:

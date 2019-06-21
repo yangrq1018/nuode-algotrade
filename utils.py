@@ -1,8 +1,5 @@
 import pandas as pd
 
-from chip import CDS
-from model import prepare_model
-
 DATA_DIR = r"C:\Users\admin\Desktop\新建文件夹\筹码分布策略\data"
 
 
@@ -69,17 +66,4 @@ class TradingPeriodEnds(Exception):
 
 
 def annualize(rt, n_years):
-    return (1 + rt) ** (1/n_years) - 1
-
-
-def get_model_cds_X_test(split):
-    # The days before this date are training set
-    # The days on and after this date are the testing set
-    df = get_dataframe('IF')
-    cds = CDS(df.index, df.CLOSE, df.TURN, 'IF')
-
-    # Load from pickle instead of retraining
-    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
-                                          evaluate=True, **Parameters.standard)
-
-    return model, cds, X_test
+    return (1 + rt) ** (1 / n_years) - 1
