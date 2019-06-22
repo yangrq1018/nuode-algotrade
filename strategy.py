@@ -1,15 +1,26 @@
+#  Copyright (c) 2019. All rights reserved.
+#  Author: Ruoqi Yang
+#  @Imperial College London, HKU alumni
+#  mailto: yangrq@connect.hku.hk
+#  This file is part of the quantitative research of Nuode Fund, contact
+#  service@nuodefund.com for commercial use.
+
 """
 规则只做多，不做空，M等分初始资金，RP天后平仓，只有平仓后可以继续买入
 """
+
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from emoji import emojize
 from sklearn.ensemble import RandomForestClassifier
 
 from model import get_model_cds_X_test
+from plotting import sample_signals
 from utils import TradingPeriodEnds, annualize
 
+mpl.rcParams['figure.dpi'] = 300
 RP = 60
 
 plt.style.use('seaborn')
@@ -19,7 +30,10 @@ class Trader:
     def __init__(self, trained_model: RandomForestClassifier, time_axis, tolerance):
         """
         The trader needs a model to process the signals and produce trading decisions
-        :param trained_model:
+        :param trained_model: a trained RandomForest to classify signals
+        :param time_axis: a DatetimeIndex to track transactions
+        :param tolerance: an integer between 0 and 1 to control probability regulation. The lower, the stronger
+        confidence we need to call for action to open positions (long/short)
         """
         self.model = trained_model
         self.time_axis = time_axis
@@ -152,6 +166,9 @@ class Broker:
         self.leger['gain_total'] = np.float64(0)
         self.leger['loss_count'] = np.int64(0)
         self.leger['loss_total'] = np.float64(0)
+        self.leger['long_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
+        self.leger['short_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
+
 
     def register_trader_and_market(self, t: Trader, m: Market):
         self._trader = t
@@ -277,6 +294,9 @@ class Broker:
 
         # record net worth on leger
         self.leger['net_worth'][today] = self.net_worth()
+        self.leger['long_pos_profile_s'][today] = self.holdings
+        self.leger['short_pos_profile_s'][today] = self.obligations
+
 
         self._clock += 1
         if self._clock == len(self._time_axis):
@@ -367,7 +387,25 @@ def evaluate(broker, market, cds, split, initial_balance, show=[]):
     return excess_return, max_drawdown
 
 
-def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance, tolerance, show=[]):
+def plot_price(cds, ax: plt.Axes):
+    prices = cds.prices[cds.prices.index >= split]
+    # ax.xaxis.set_tick_params(rotation=45)
+    ax.plot(prices.index, prices.values, lw=0.8, label="Prices of {}".format(cds.name))
+
+
+def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance, tolerance, show_plot=[]):
+    """
+
+    :param model:
+    :param cds:
+    :param X_test:
+    :param split:
+    :param fund_partition:
+    :param initial_balance:
+    :param tolerance:
+    :param show_plot: subset of ['net_worth_curve', 'signals', 'in_out']
+    :return:
+    """
     trading_period = cds.prices.index[cds.prices.index >= split]
 
     # Instantiate trader, market and broker
@@ -381,8 +419,49 @@ def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance
         try:
             broker.proceed()
         except TradingPeriodEnds as e:
-            print(e)
-            return evaluate(broker, market, cds, split, initial_balance, show=show)
+            print(emojize(':alarm_clock:' + str(e), use_aliases=True))
+            break
+
+    if 'price' in show_plot:
+        if 'in_out' in show_plot:
+            ax = plt.subplot(211)
+            plot_price(cds, ax)
+        else:
+            plot_price(cds, plt.gca())
+
+    if 'signal' in show_plot:
+        sample_signals(split, model, X_test, cds, RP)
+
+    if 'in_out' in show_plot:
+        long = broker.leger['long'] != 0
+        short = broker.leger['short'] != 0
+
+        prices_in_trading_period = cds.prices[trading_period]
+        long_points = prices_in_trading_period[long]
+        short_points = prices_in_trading_period[short]
+
+        param = dict(width=0.8e-3, angles='xy', scale_units='xy', scale=1)  # args to plot like gradients
+        dpc = 25
+        arrow_length = 50
+
+        plt.quiver(long_points.index.values, long_points.values + dpc,
+                   np.full(len(long_points), 0), np.full(len(long_points), arrow_length),
+                   label="enter long", color='r', **param)
+        plt.quiver(short_points.index.values, short_points.values - dpc,
+                   np.full(len(short_points), 0), np.full(len(short_points), -arrow_length),
+                   label="enter short", color='g', **param)
+        plt.legend(loc='best')
+
+    if 'long_short_pos' in show_plot:
+        l, s = broker.leger['long_pos_profile_s'], broker.leger['short_pos_profile_s']
+        ax = plt.subplot(212)
+        ax.plot(l.index, l, label="long position over time")
+        ax.plot(s.index, s, label="short position over time")
+        ax.set_ylabel('number of shares')
+        ax.legend(loc='best')
+
+    plt.show()
+    return evaluate(broker, market, cds, split, initial_balance, show=show_plot)
 
 
 def er_mdd():
@@ -415,10 +494,10 @@ def er_mdd():
 if __name__ == '__main__':
     split = '2016-06-13'
     fund_partition = 50
-    initial_balance = 1000
+    initial_balance = 100000
 
     simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, 0.8,
-                      show=[])
+                      show_plot=['price', 'in_out', 'long_short_pos'])
 
     # er_mdd()
-    # sample_signals('2016-06-13', 'IF')
+    # ax = sample_signals('2016-06-13', 'IF')

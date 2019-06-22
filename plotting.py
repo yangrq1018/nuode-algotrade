@@ -1,3 +1,10 @@
+#  Copyright (c) 2019. All rights reserved.
+#  Author: Ruoqi Yang
+#  @Imperial College London, HKU alumni
+#  mailto: yangrq@connect.hku.hk
+#  This file is part of the quantitative research of Nuode Fund, contact
+#  service@nuodefund.com for commercial use.
+
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -19,36 +26,19 @@ def compute_signals(model, X_test):
     return pd.Series(data=predictions, index=X_test.index)
 
 
-def sample_signals(split, name):
-    def plot_signals(prices, signals, name, rp):
-        """
-        :param name:
-        :param prices: a Series indexed by date, closing prices
-        :param signals: a binary series indexed by date, 1 for up and 0 for down
-        :return:
-        """
-
-        plt.plot(prices.index, prices.values, lw=0.8, label="Prices of {}".format(name))
-        # You may subscript a Series directly by datetime objects
-        ups = prices[signals[signals == 1].index]
-        downs = prices[signals[signals == 0].index]
-
-        # You may pass a Series itself to pyplot, it will extract values
-        plt.scatter(ups.index, ups.values, c='r', s=9, label="Up signals in {} days".format(rp))
-        plt.scatter(downs.index, downs.values, c='g', s=9, label="Down signals in {} days".format(rp))
-        plt.xlabel('Time')
-        plt.ylabel('Price')
-        plt.legend(loc='best')
-        plt.show()
-
-    df = get_dataframe(name)
-    cds = CDS(df.index, df.CLOSE, df.TURN, name)
-    model, X_test, y_test = prepare_model(cds, split_date=split,
-                                          evaluate=True, **Parameters.standard)
+def sample_signals(split, model, X_test, cds, rp):
     # A trader needs a trained model
     signals = compute_signals(model, X_test)
 
     # Get prices
     prices = cds.prices[cds.prices.index >= split]
-    plt.xticks(rotation=45)
-    plot_signals(prices, signals, 'IF', 60)
+    # You may subscript a Series directly by datetime objects
+    ups = prices[signals[signals == 1].index]
+    downs = prices[signals[signals == 0].index]
+
+    # You may pass a Series itself to pyplot, it will extract values
+    plt.scatter(ups.index, ups.values, c='r', s=9, label="Up signals in {} days".format(rp))
+    plt.scatter(downs.index, downs.values, c='g', s=9, label="Down signals in {} days".format(rp))
+    plt.xlabel('Time')
+    plt.ylabel('Price')
+    return plt.gca()
