@@ -26,7 +26,7 @@ def compute_signals(model, X_test):
     return pd.Series(data=predictions, index=X_test.index)
 
 
-def sample_signals(split, model, X_test, cds, rp):
+def sample_signals(split, ax, model, X_test, cds, rp):
     # A trader needs a trained model
     signals = compute_signals(model, X_test)
 
@@ -37,8 +37,7 @@ def sample_signals(split, model, X_test, cds, rp):
     downs = prices[signals[signals == 0].index]
 
     # You may pass a Series itself to pyplot, it will extract values
-    plt.scatter(ups.index, ups.values, c='r', s=9, label="Up signals in {} days".format(rp))
-    plt.scatter(downs.index, downs.values, c='g', s=9, label="Down signals in {} days".format(rp))
-    plt.xlabel('Time')
-    plt.ylabel('Price')
-    return plt.gca()
+    ax.scatter(ups.index, ups.values, c='r', s=9, label="Up signals in {} days".format(rp))
+    ax.scatter(downs.index, downs.values, c='g', s=9, label="Down signals in {} days".format(rp))
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Price')

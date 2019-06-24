@@ -15,10 +15,14 @@ import numpy as np
 import pandas as pd
 from emoji import emojize
 from sklearn.ensemble import RandomForestClassifier
+from sklearn import tree
+import matplotlib.ticker as mticker
+import graphviz
+import os
 
 from model import get_model_cds_X_test
 from plotting import sample_signals
-from utils import TradingPeriodEnds, annualize
+from utils import TradingPeriodEnds, annualize, fp
 
 mpl.rcParams['figure.dpi'] = 300
 RP = 60
@@ -135,13 +139,16 @@ class Broker:
 
         # Rate assumptions
         self.commission_rate = 0.23 / 10000
-        self.rf = 2.648 / 100  # 一年期国债收益率
+        self.rf = 3.625 / 100  # 最新十年期国债收益率 2019.6.24 10:13:46
+        # https://cn.investing.com/rates-bonds/china-10-year-bond-yield
 
         self._time_axis = time_axis
+        self.init_balance = initial_balance
+
         self.cash_bal = init_balance
         self.short_proceed = 0  # short share proceed account
         self.deposit = 0  # Short deposit account
-        self.open_close_count = 0  # Open/Close transaction
+
 
         self.holdings = 0
         self.obligations = 0
@@ -168,6 +175,7 @@ class Broker:
         self.leger['loss_total'] = np.float64(0)
         self.leger['long_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['short_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
+        self.leger['open_close_count'] = np.int64(0)  # Open/Close transaction
 
 
     def register_trader_and_market(self, t: Trader, m: Market):
@@ -218,7 +226,7 @@ class Broker:
             else:
                 self.leger['loss_count'] += 1
                 self.leger['loss_total'] += notional_amt - self.investment_cash_unit
-            self.open_close_count += 1
+            self.leger['open_close_count'] += 1
 
         cover = self._trader.close_short(today)
         if cover:
@@ -240,11 +248,11 @@ class Broker:
 
             if notional_amt <= self.investment_cash_unit:
                 self.leger['win_count'] += 1
-                self.leger['gain_total'] += notional_amt - self.investment_cash_unit
+                self.leger['gain_total'] += self.investment_cash_unit - notional_amt # Positive
             else:
                 self.leger['loss_count'] += 1
-                self.leger['loss_total'] += notional_amt - self.investment_cash_unit
-            self.open_close_count += 1
+                self.leger['loss_total'] += self.investment_cash_unit - notional_amt # Negative
+            self.leger['open_close_count'] += 1
 
         # New position
         judgement = self._trader.decide(self._market.get_chip_stats(today))
@@ -297,7 +305,6 @@ class Broker:
         self.leger['long_pos_profile_s'][today] = self.holdings
         self.leger['short_pos_profile_s'][today] = self.obligations
 
-
         self._clock += 1
         if self._clock == len(self._time_axis):
             # if self.holdings != 0:
@@ -316,6 +323,7 @@ def mdd(net_worths):
 
     return np.min([dd(net_worths[s:]) for s in net_worths.index])
 
+
 def sharpe_ratio(series, rf, annualized_return=None):
     """
 
@@ -329,7 +337,7 @@ def sharpe_ratio(series, rf, annualized_return=None):
     return (annualized_return - rf) / annual_vol
 
 
-def evaluate(broker, market, cds, split, initial_balance, show=[]):
+def evaluate(broker, market, cds, split, initial_balance):
     last_trading_day = pd.Timestamp.strptime('2019-06-12', '%Y-%m-%d')
     first_trading_day = pd.Timestamp.strptime(split, '%Y-%m-%d')
 
@@ -354,11 +362,11 @@ def evaluate(broker, market, cds, split, initial_balance, show=[]):
     win_ratio = broker.leger['win_count'] / (broker.leger['win_count'] + broker.leger['loss_count'])
     gain_loss_ratio = (broker.leger['gain_total'] / broker.leger['win_count']) / \
                       (-(broker.leger['loss_total'] / broker.leger['loss_count']))
+    assert gain_loss_ratio > 0
 
     # Sharpe ratio
     sr = sharpe_ratio(broker.leger['net_worth'], rf=broker.rf, annualized_return=an_return)
     bm_sr = sharpe_ratio(market._prices, broker.rf, bm_an_return)
-
 
     print('时间区间\t from {} to {}, {:.2f} years'.format(
         first_trading_day.strftime('%Y-%m-%d'),
@@ -373,27 +381,27 @@ def evaluate(broker, market, cds, split, initial_balance, show=[]):
     print('超额年化收益率\t {:.2f}%'.format(excess_return * 100))
     print('最大回撤\t\t {:.2f}%'.format(max_drawdown * 100))
     print('胜率\t\t {:.2f}%'.format(win_ratio * 100))
-    print('赔率\t\t {:.2f}%'.format(gain_loss_ratio * 100))
-    print('策略夏普比率\t: {:.2f}'.format(sr))
-    print('标的夏普比率\t: {:.2f}'.format(bm_sr))
-    print('{} positions = {}(win) + {}(loss)'.format(broker.open_close_count, broker.leger['win_count'],
+    print('赔率\t\t {:.2f}'.format(gain_loss_ratio))
+    print('策略夏普比率\t {:.2f}'.format(sr))
+    print('标的夏普比率\t {:.2f}'.format(bm_sr))
+    print('{} 头寸 = {}(胜负) + {}(负)'.format(broker.leger['open_close_count'], broker.leger['win_count'],
                                                      broker.leger['loss_count']))
-
-    if 'net_worth_curve' in show:
-        broker.leger['net_worth'].plot()
-        plt.title('Net worth curve')
-        plt.show()
+    print('{} 头寸 = {}(多) + {}(空)'.format(broker.leger['open_close_count'],
+                                         len(broker.leger['long'][broker.leger['long'] != 0]),
+                                         len(broker.leger['short'][broker.leger['short'] != 0])
+                                         ))
 
     return excess_return, max_drawdown
 
 
-def plot_price(cds, ax: plt.Axes):
+def plot_price(cds, ax: plt.Axes, lw=0.8):
     prices = cds.prices[cds.prices.index >= split]
     # ax.xaxis.set_tick_params(rotation=45)
-    ax.plot(prices.index, prices.values, lw=0.8, label="Prices of {}".format(cds.name))
+    ax.plot(prices.index, prices.values, lw=lw, label="指数价格")
 
 
-def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance, tolerance, show_plot=[]):
+def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_partition, initial_balance, tolerance,
+                      show_plot=[]):
     """
 
     :param model:
@@ -429,10 +437,8 @@ def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance
         else:
             plot_price(cds, plt.gca())
 
-    if 'signal' in show_plot:
-        sample_signals(split, model, X_test, cds, RP)
-
     if 'in_out' in show_plot:
+        ax = plt.subplot(211)
         long = broker.leger['long'] != 0
         short = broker.leger['short'] != 0
 
@@ -444,24 +450,60 @@ def simulate_strategy(model, cds, X_test, split, fund_partition, initial_balance
         dpc = 25
         arrow_length = 50
 
-        plt.quiver(long_points.index.values, long_points.values + dpc,
-                   np.full(len(long_points), 0), np.full(len(long_points), arrow_length),
-                   label="enter long", color='r', **param)
-        plt.quiver(short_points.index.values, short_points.values - dpc,
-                   np.full(len(short_points), 0), np.full(len(short_points), -arrow_length),
-                   label="enter short", color='g', **param)
-        plt.legend(loc='best')
+        ax.quiver(long_points.index.values, long_points.values + dpc,
+                  np.full(len(long_points), 0), np.full(len(long_points), arrow_length),
+                  label="做多", color='r', **param)
+        ax.quiver(short_points.index.values, short_points.values - dpc,
+                  np.full(len(short_points), 0), np.full(len(short_points), -arrow_length),
+                  label="做空", color='g', **param)
+        ax.legend(loc='best', prop=fp)
+
+    if 'acc_return' in show_plot:
+        # twinx should distinguish the left axe and the right axe
+        ax = plt.subplot(211).twinx()
+        acc_return_series_perc = (broker.leger['net_worth'] / broker.init_balance - 1) * 100
+        acc_return_series_perc.plot(ax=ax, label="accumulative return", color='crimson', grid=False)
+        # format right y axis as percentage
+        ax.yaxis.set_major_formatter(mticker.PercentFormatter())
+        # ax.legend()
+        # plt.show()
+
+    if 'signal' in show_plot:
+        sample_signals(split, plt.subplot(211), model, X_test, cds, RP)
 
     if 'long_short_pos' in show_plot:
         l, s = broker.leger['long_pos_profile_s'], broker.leger['short_pos_profile_s']
         ax = plt.subplot(212)
-        ax.plot(l.index, l, label="long position over time")
-        ax.plot(s.index, s, label="short position over time")
-        ax.set_ylabel('number of shares')
-        ax.legend(loc='best')
+        ax.stackplot(l.index, l, s, labels=["看多头寸", "看空头寸"])
+        ax.plot(l.index, l-s, label="净头寸", color='crimson')
+        ax.legend(loc='best', prop=fp)
+
+    if 'viz_tree' in show_plot:
+        print('Visualizing one decision tree')
+        t = model.estimators_[0]
+        dot_data = tree.export_graphviz(t, out_file=None)
+        graph = graphviz.Source(dot_data)
+        graph.render('sample_tree', directory='report'+os.sep+'figure')
 
     plt.show()
-    return evaluate(broker, market, cds, split, initial_balance, show=show_plot)
+
+    if 'daily_return' in show_plot:
+        # Daily return
+        plot_price(cds, plt.gca(), lw=1)
+        ax_twin = plt.twinx()
+        daily_return = broker.leger['net_worth'].rolling(2).apply(
+            lambda x: (x[1]-x[0])/x[0]
+        )
+
+        gain = daily_return[daily_return >= 0]
+        loss = daily_return[daily_return <= 0]
+        ax_twin.bar(gain.index, gain, color='crimson')
+        ax_twin.bar(loss.index, loss, color='green')
+        ax_twin.grid(None)
+        ax_twin.set_ylim(top=np.nanmax(daily_return) * 8)
+        plt.show()
+
+    return evaluate(broker, market, cds, split, initial_balance)
 
 
 def er_mdd():
@@ -495,9 +537,13 @@ if __name__ == '__main__':
     split = '2016-06-13'
     fund_partition = 50
     initial_balance = 100000
+    prob_tol_factor = 0.8
 
-    simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, 0.8,
-                      show_plot=['price', 'in_out', 'long_short_pos'])
+    # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
+    #                   show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
+
+    simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
+                      show_plot=['viz_tree'])
 
     # er_mdd()
     # ax = sample_signals('2016-06-13', 'IF')

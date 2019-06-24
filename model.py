@@ -61,9 +61,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
         # Remove chips with probability less than 1%, and scale up others
         # Try to reveal the major holders
         clipped_cd = cds_object.get_chip_dist(d, clip_factor=clipping_factor)
-
         current_price = cds_object.prices[d]
-
         past_prices_window = _compute_back_price_window(cds_object, d, back_price_window)
 
         if len(past_prices_window) < 2:
@@ -83,11 +81,23 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
         profit_prob = profit_region(clipped_cd, current_price)
 
         Xd.append((d,
-                   [cp_rel_pos_hist, mc_rel_pos_hist, kurtosis, cp_neighbor_perc, profit_prob]))
+                   [
+                       cp_rel_pos_hist,
+                       mc_rel_pos_hist,
+                       kurtosis,
+                       # cp_neighbor_perc,
+                       # profit_prob
+                   ]))
 
     Xd = OrderedDict(Xd)
     Xd = pd.DataFrame.from_dict(Xd, orient='index')
-    Xd.columns = ['当前价格位置', '平均持仓成本位置', '峰度', '当前价格筹码集中度', '盈利比例']
+    Xd.columns = [
+        '当前价格位置',
+        '平均持仓成本位置',
+        '峰度',
+        # '当前价格筹码集中度',
+        # '盈利比例'
+    ]
 
     # Construct return series
     yd = k_day_return_afterward(cds_object.prices, return_period)
