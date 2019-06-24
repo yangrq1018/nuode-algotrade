@@ -10,7 +10,7 @@ import os
 from matplotlib.font_manager import FontProperties
 
 DATA_DIR = "data"
-fp = FontProperties('SimHei') # 雅黑字体
+fp = FontProperties('SimHei')  # 雅黑字体
 
 def get_dataframe(index):
     """

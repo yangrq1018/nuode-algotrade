@@ -22,10 +22,12 @@ import os
 
 from model import get_model_cds_X_test
 from plotting import sample_signals
-from utils import TradingPeriodEnds, annualize, fp
+from utils import TradingPeriodEnds, annualize, fp, Parameters
 
 mpl.rcParams['figure.dpi'] = 300
-RP = 60
+
+# Forecast period
+RP = Parameters.standard['return_period']
 
 plt.style.use('seaborn')
 
@@ -541,7 +543,7 @@ if __name__ == '__main__':
     initial_balance = 100000
     prob_tol_factor = 0.8
 
-    simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
+    simulate_strategy(*get_model_cds_X_test(split, SI="IH"), split, fund_partition, initial_balance, prob_tol_factor,
                       show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
 
     # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,

@@ -17,11 +17,11 @@ from chip import CDS
 from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region, get_dataframe, Parameters
 
 
-def get_model_cds_X_test(split):
+def get_model_cds_X_test(split, SI="IF"):
     # The days before this date are training set
     # The days on and after this date are the testing set
-    df = get_dataframe('IF')
-    cds = CDS(df.index, df.CLOSE, df.TURN, 'IF')
+    df = get_dataframe(SI)
+    cds = CDS(df.index, df.CLOSE, df.TURN, SI)
 
     # Load from pickle instead of retraining
     model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
