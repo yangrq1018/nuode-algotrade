@@ -489,7 +489,9 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
 
     if 'daily_return' in show_plot:
         # Daily return
-        plot_price(cds, plt.gca(), lw=1)
+        nw = broker.leger['net_worth'] / broker.init_balance
+        nw.plot()
+        plt.ylim(bottom=np.min(nw)*0.9) # separate two graphs
         ax_twin = plt.twinx()
         daily_return = broker.leger['net_worth'].rolling(2).apply(
             lambda x: (x[1]-x[0])/x[0]
@@ -539,11 +541,11 @@ if __name__ == '__main__':
     initial_balance = 100000
     prob_tol_factor = 0.8
 
-    # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
-    #                   show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
-
     simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
-                      show_plot=['viz_tree'])
+                      show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
+
+    # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
+    #                   show_plot=['viz_tree'])
 
     # er_mdd()
     # ax = sample_signals('2016-06-13', 'IF')
