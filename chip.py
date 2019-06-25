@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from logger import logger
+from utils import get_dataframe
 
 
 class CDS:
@@ -48,6 +49,11 @@ class CDS:
 
         self.chip_dists = OrderedDict(self.chip_dists)
         self.prices = pd.Series(OrderedDict(sorted(self.prices.items(), key=lambda x: x[0])))
+
+    @staticmethod
+    def from_ticker(ticker):
+        df = get_dataframe(ticker)
+        return CDS(df.index, df.CLOSE, df.TURN, ticker)
 
     def get_price_on_date(self, date):
         if date not in self.prices.index:

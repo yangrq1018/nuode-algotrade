@@ -12,6 +12,7 @@ from matplotlib.font_manager import FontProperties
 DATA_DIR = "data"
 fp = FontProperties('SimHei')  # 雅黑字体
 
+
 def get_dataframe(index):
     """
     For IF (沪深300期货) as example, 2005-4-8 is the first day when both turn and close price data

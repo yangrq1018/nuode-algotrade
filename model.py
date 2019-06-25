@@ -18,8 +18,13 @@ from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_regi
 
 
 def get_model_cds_X_test(split, SI="IF"):
-    # The days before this date are training set
-    # The days on and after this date are the testing set
+    """
+    The days before this date are training set
+    The days on and after this date are the testing set
+    :param split:
+    :param SI:
+    :return:
+    """
     df = get_dataframe(SI)
     cds = CDS(df.index, df.CLOSE, df.TURN, SI)
 
@@ -31,7 +36,7 @@ def get_model_cds_X_test(split, SI="IF"):
 
 
 def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
-               back_price_window='max'):
+               back_price_window):
     """
     :param save_df:
     :param back_price_window:
@@ -113,7 +118,7 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
     return Xd, yd
 
 
-def prepare_model(cds, split_date='2018-01-01', pkl_file=None, load_from_disk=False,
+def prepare_model(cds, split_date, pkl_file=None, load_from_disk=False,
                   evaluate=False, save_to_disk=False, **kwargs):
     """
     Return X_test, y_test along side the trained model
@@ -151,49 +156,3 @@ def prepare_model(cds, split_date='2018-01-01', pkl_file=None, load_from_disk=Fa
 
     return model, X_test, y_test
 
-# cv_book = []
-#
-
-# for F in ['IF', 'IC', 'IH']:
-#     stock_index = get_dataframe(F)
-#     print('$$$股指:', NAME[F])
-#     for neighbor, return_period, clip_factor, back_price_window in product([0.01, 0.05, 0.1],
-#                                                                        [30, 45, 60],
-#                                                                        [0.01, 0.005, 0.001],
-#                                                                        [30, 60, 'max']):
-#         # neighbor, return_period, clip_factor, back_price_window = 0.01, 45, 0.005, 60
-#         parameters = (neighbor, return_period, clip_factor, back_price_window)
-#         print('------------------------')
-#         print('Under parameters:', parameters)
-#         cds = CDS(stock_index.index, stock_index.CLOSE, stock_index .TURN, name=F)
-#         parameters = dict(neighbor_factor=0.01, return_period=45, clipping_factor=0.005, back_price_window=60)
-#         model, test_X, test_y = prepare_model(cds, evaluate=True, model_type='classification', **parameters)
-#         score = accuracy_score(test_y, model.predict(test_X))
-#         cv_book.append([NAME[F], neighbor, return_period, clip_factor, back_price_window, score])
-#
-# cv_book = pd.DataFrame(cv_book, columns=['股指', '参数1', '参数2', '参数3', '参数4', '得分'])
-# cv_book.to_excel('调参结果.xlsx', index=False)
-
-#
-# for SPLIT_DATE in ['2016-01-01', '2017-01-01', '2018-01-01']:
-#     for C_TICKER in ['IF', 'IC', 'IH']:
-#         rps = np.arange(2, 61, step=5)
-#         stock_index = get_dataframe(C_TICKER)
-#         cds = CDS(stock_index.index, stock_index.CLOSE, stock_index.TURN, name=C_TICKER)
-#         accu_scores = []
-#         for rp in rps:
-#             print('rp:', rp)
-#             parameters = dict(neighbor_factor=0.01, return_period=rp, clipping_factor=0.005, back_price_window=60)
-#             model, X_test, y_test = prepare_model(cds, evaluate=False, split_date=SPLIT_DATE,
-#                                                   model_type='classification',
-#                                                   **parameters)
-#             print(y_test.shape, model.predict(X_test).shape)
-#             score = accuracy_score(y_test, model.predict(X_test))
-#             print('Score:', score)
-#             accu_scores.append(score)
-#
-#         plt.plot(rps, accu_scores)
-#         plt.xlabel('Forecasting period')
-#         plt.title(C_TICKER + ' SD:' + SPLIT_DATE)
-#         plt.ylabel('Accuracy score')
-#         plt.show()

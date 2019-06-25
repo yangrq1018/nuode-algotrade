@@ -5,9 +5,6 @@
 #  This file is part of the quantitative research of Nuode Fund, contact
 #  service@nuodefund.com for commercial use.
 
-"""
-规则只做多，不做空，M等分初始资金，RP天后平仓，只有平仓后可以继续买入
-"""
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -129,6 +126,7 @@ class Market:
 class Broker:
     """
     中金所 2019年4月公告，交易手续费为成交金额的万分之零点二三，平今仓手续费为成交金额的万分之三点四五
+    只做多，不做空，M等分初始资金，RP天后平仓，只有平仓后可以继续买入
     """
 
     def __init__(self, time_axis, init_balance, partition=10):
@@ -150,7 +148,6 @@ class Broker:
         self.cash_bal = init_balance
         self.short_proceed = 0  # short share proceed account
         self.deposit = 0  # Short deposit account
-
 
         self.holdings = 0
         self.obligations = 0
@@ -178,7 +175,6 @@ class Broker:
         self.leger['long_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['short_pos_profile_s'] = pd.Series(data=np.float64(0), index=self._time_axis)
         self.leger['open_close_count'] = np.int64(0)  # Open/Close transaction
-
 
     def register_trader_and_market(self, t: Trader, m: Market):
         self._trader = t
@@ -250,10 +246,10 @@ class Broker:
 
             if notional_amt <= self.investment_cash_unit:
                 self.leger['win_count'] += 1
-                self.leger['gain_total'] += self.investment_cash_unit - notional_amt # Positive
+                self.leger['gain_total'] += self.investment_cash_unit - notional_amt  # Positive
             else:
                 self.leger['loss_count'] += 1
-                self.leger['loss_total'] += self.investment_cash_unit - notional_amt # Negative
+                self.leger['loss_total'] += self.investment_cash_unit - notional_amt  # Negative
             self.leger['open_close_count'] += 1
 
         # New position
@@ -387,7 +383,7 @@ def evaluate(broker, market, cds, split, initial_balance):
     print('策略夏普比率\t {:.2f}'.format(sr))
     print('标的夏普比率\t {:.2f}'.format(bm_sr))
     print('{} 头寸 = {}(胜负) + {}(负)'.format(broker.leger['open_close_count'], broker.leger['win_count'],
-                                                     broker.leger['loss_count']))
+                                          broker.leger['loss_count']))
     print('{} 头寸 = {}(多) + {}(空)'.format(broker.leger['open_close_count'],
                                          len(broker.leger['long'][broker.leger['long'] != 0]),
                                          len(broker.leger['short'][broker.leger['short'] != 0])
@@ -477,15 +473,15 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         l, s = broker.leger['long_pos_profile_s'], broker.leger['short_pos_profile_s']
         ax = plt.subplot(212)
         ax.stackplot(l.index, l, s, labels=["看多头寸", "看空头寸"])
-        ax.plot(l.index, l-s, label="净头寸", color='crimson')
-        ax.legend(loc='best', prop=fp)
+        ax.plot(l.index, l - s, label="净头寸", color='crimson')
+        ax.legend(loc='lower right', prop=fp)
 
     if 'viz_tree' in show_plot:
         print('Visualizing one decision tree')
         t = model.estimators_[0]
         dot_data = tree.export_graphviz(t, out_file=None)
         graph = graphviz.Source(dot_data)
-        graph.render('sample_tree', directory='report'+os.sep+'figure')
+        graph.render('sample_tree', directory='report' + os.sep + 'figure')
 
     plt.show()
 
@@ -493,10 +489,10 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         # Daily return
         nw = broker.leger['net_worth'] / broker.init_balance
         nw.plot()
-        plt.ylim(bottom=np.min(nw)*0.9) # separate two graphs
+        plt.ylim(bottom=np.min(nw) * 0.9)  # separate two graphs
         ax_twin = plt.twinx()
         daily_return = broker.leger['net_worth'].rolling(2).apply(
-            lambda x: (x[1]-x[0])/x[0]
+            lambda x: (x[1] - x[0]) / x[0]
         )
 
         gain = daily_return[daily_return >= 0]
@@ -543,7 +539,7 @@ if __name__ == '__main__':
     initial_balance = 100000
     prob_tol_factor = 0.8
 
-    simulate_strategy(*get_model_cds_X_test(split, SI="IH"), split, fund_partition, initial_balance, prob_tol_factor,
+    simulate_strategy(*get_model_cds_X_test(split, SI="IF"), split, fund_partition, initial_balance, prob_tol_factor,
                       show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
 
     # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
