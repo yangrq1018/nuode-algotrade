@@ -6,12 +6,7 @@
 #  service@nuodefund.com for commercial use.
 
 import pandas as pd
-from matplotlib import pyplot as plt
-
-from chip import CDS
-from model import prepare_model
-from utils import get_dataframe, Parameters
-
+from utils import fp
 
 def compute_signals(model, X_test):
     """
@@ -26,7 +21,7 @@ def compute_signals(model, X_test):
     return pd.Series(data=predictions, index=X_test.index)
 
 
-def sample_signals(split, ax, model, X_test, cds, rp):
+def sample_signals(split, ax, model, X_test, cds):
     # A trader needs a trained model
     signals = compute_signals(model, X_test)
 
@@ -37,7 +32,6 @@ def sample_signals(split, ax, model, X_test, cds, rp):
     downs = prices[signals[signals == 0].index]
 
     # You may pass a Series itself to pyplot, it will extract values
-    ax.scatter(ups.index, ups.values, c='r', s=9, label="Up signals in {} days".format(rp))
-    ax.scatter(downs.index, downs.values, c='g', s=9, label="Down signals in {} days".format(rp))
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Price')
+    ax.scatter(ups.index, ups.values, c='r', s=9, alpha=0.8, label="看多信号")
+    ax.scatter(downs.index, downs.values, c='g', s=9, alpha=0.8, label="看空信号")
+    ax.legend(prop=fp)

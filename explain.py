@@ -7,20 +7,26 @@
 
 from model import prepare_model
 from chip import CDS
-from utils import Parameters
+from utils import Parameters, fp
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib as mpl
+
+# mpl.rcParams['figure.dpi'] = 200
+# plt.style.use('seaborn')
+
+
 
 clf, X_test, y_test = prepare_model(CDS.from_ticker('IF'), '2016-06-13', **Parameters.standard)
 
-for case in ['actual', 'predicted']:
+for case in ['预测']:
     prediction = clf.predict(X_test)
 
-    if case == 'actual':
+    if case == '实际':
         ups = X_test[y_test == 1]
         downs = X_test[y_test == 0]
 
-    if case == 'predicted':
+    if case == '预测':
         ups = X_test[prediction == 1]
         downs = X_test[prediction == 0]
 
@@ -28,14 +34,14 @@ for case in ['actual', 'predicted']:
     ax = fig.add_subplot(111, projection='3d')
 
     ax.scatter(ups.values[:, 0], ups.values[:, 1], ups.values[:, 2],
-               c="r", marker="o", label=f"{case} Up")
+               c="r", marker="o", label="{}上升".format(case))
     ax.scatter(downs.values[:, 0], downs.values[:, 1], downs.values[:, 2],
-               c='b', marker='^', label=f"{case} Down")
+               c='b', marker='^', label="{}下降".format(case))
 
-    ax.set_xlabel('current price')
-    ax.set_ylabel('average cost')
-    ax.set_zlabel('kurtosis')
-    ax.legend(loc='best')
+    ax.set_xlabel('当前价格位置', fontproperties=fp)
+    ax.set_ylabel('平均持仓成本位置', fontproperties=fp)
+    ax.set_zlabel('超额峰度', fontproperties=fp)
+    ax.legend(loc='best', prop=fp)
 
     fig.show()
 
@@ -46,3 +52,6 @@ for case in ['actual', 'predicted']:
     fig.show()
 
     # fig2 = plt.figure()
+
+# cds = CDS.from_ticker('IF')
+# cds.plot_dist('2018-04-17', 0.005, aggregate=True, bin_size=10)

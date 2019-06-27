@@ -11,8 +11,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from logger import logger
-from utils import get_dataframe
+from utils import get_dataframe, fp
 
 
 class CDS:
@@ -81,7 +80,6 @@ class CDS:
 
         rel = self.chip_dists[date].copy()
         if clip_factor:
-            logger.debug('Threshold chips')
             if clip_factor < 0 or clip_factor > 1:
                 raise ValueError("Improper threshold, between 0 and 1")
             clip_factor = max(rel.values()) * clip_factor  # The filter is set to max(prob) * thresh
@@ -110,7 +108,7 @@ class CDS:
             rel = new_rel
         return rel
 
-    def plot_dist(self, date_str, **kwargs):
+    def plot_dist(self, date_str, clip_factor=None, aggregate=False, bin_size=None):
         """
         TODO, filter for non-significant chips at certain price levels, so that we can
         enlarge the plot and get a clear shape
@@ -119,7 +117,7 @@ class CDS:
         """
 
         date = datetime.strptime(date_str, '%Y-%m-%d')
-        dist = self.get_chip_dist(date_str, **kwargs)
+        dist = self.get_chip_dist(date_str, clip_factor, aggregate, bin_size)
         current_price = self.prices[date]
         # Partition prices as greater than and less than
         lower_dist = {k: v for k, v in dist.items() if k < current_price}
@@ -127,17 +125,16 @@ class CDS:
 
         profit_percentage = sum(lower_dist.values()) / (sum(upper_dist.values()) + sum(lower_dist.values()))
 
-        plt.barh(*zip(*lower_dist.items()), height=9, color="b", label="Profit region: {}".format(
-            profit_percentage
+        plt.barh(*zip(*lower_dist.items()), height=9, color="b", label="获利盘{:.2f}%".format(
+            profit_percentage * 100
         ))
         plt.barh(*zip(*upper_dist.items()), height=9, color="y")
 
         # Add that day's price as cut off
-        plt.axhline(y=current_price, c='k', ls='--')
+        plt.axhline(y=current_price, c='k', ls='--', lw=1.1, label="收盘价")
 
-        plt.xlabel('Chip')
-        plt.ylabel('Price')
-        plt.legend(loc='best')
-        plt.title('Chip distribution on {}'.format(date_str))
+        plt.xlabel('筹码密度', fontproperties=fp)
+        plt.ylabel('点数', fontproperties=fp)
+        plt.legend(loc='best', prop=fp)
         plt.show()
         return plt.gca()

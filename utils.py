@@ -63,7 +63,7 @@ def profit_region(cd, current_price):
 
 
 class Parameters:
-    standard = dict(neighbor_factor=0.01, return_period=60, clipping_factor=0.005, back_price_window=60)
+    standard = dict(return_period=60, clipping_factor=0.005, back_price_window=60)
 
 
 FUTURES = ['IF', 'IC', 'IH']

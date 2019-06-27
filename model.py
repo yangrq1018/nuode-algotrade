@@ -11,7 +11,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 
 from chip import CDS
 from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region, get_dataframe, Parameters
@@ -35,7 +35,7 @@ def get_model_cds_X_test(split, SI="IF"):
     return model, cds, X_test
 
 
-def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
+def compute_Xy(cds_object, return_period, clipping_factor,
                back_price_window):
     """
     :param save_df:
@@ -74,16 +74,21 @@ def compute_Xy(cds_object, neighbor_factor, return_period, clipping_factor,
 
         pp_low, pp_high = min(past_prices_window), max(past_prices_window)
         # 当前价格位置
-        cp_rel_pos_hist = (cds_object.prices[d] - pp_low) / (pp_high - pp_low)
+        cp_rel_pos_hist = (current_price - pp_low) / (pp_high - pp_low)
+
         # 平均持仓成本位置
-        mc_rel = np.sum([k * v for k, v in clipped_cd.items()])
-        mc_rel_pos_hist = (mc_rel - pp_low) / (pp_high - pp_low)
+        mc = np.sum([k * v for k, v in clipped_cd.items()])
+        mc_rel_pos_hist = (mc - pp_low) / (pp_high - pp_low)
+        # cp_rel_pos_hist = (current_price - mc) / mc
+
+        # mc_rel_pos_hist = mc / cds_object.prices[d]
+
+
         # 峰度
         kurtosis = kurt(clipped_cd)
         # 当前价格筹码集中度
-        cp_neighbor_perc = neighbor_percentage(current_price, neighbor_factor, clipped_cd)
         # 盈利比例
-        profit_prob = profit_region(clipped_cd, current_price)
+        # profit_prob = profit_region(clipped_cd, current_price)
 
         Xd.append((d,
                    [
@@ -153,6 +158,12 @@ def prepare_model(cds, split_date, pkl_file=None, load_from_disk=False,
     if evaluate:
         accuracy_s = accuracy_score(y_test.values, model.predict(X_test.values))
         print('----->  accuracy score:', accuracy_s)
-
+        # Classification report
+        print(classification_report(y_test, model.predict(X_test), target_names=['跌', '涨']))
+        print('实际')
+        print(len(y_test[y_test == 1]), len(y_test[y_test == 0]))
+        print('预测')
+        pred = model.predict(X_test)
+        print(len(pred[pred == 1]), len(pred[pred == 0]))
     return model, X_test, y_test
 
