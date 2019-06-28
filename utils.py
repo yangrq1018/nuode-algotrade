@@ -8,9 +8,12 @@
 import pandas as pd
 import os
 from matplotlib.font_manager import FontProperties
+from matplotlib import style
+
 
 DATA_DIR = "data"
-fp = FontProperties('SimHei')  # 雅黑字体
+# style.use('seaborn')
+fp = FontProperties('SimHei', size=12)  # 雅黑字体
 
 
 def get_dataframe(index):

@@ -53,7 +53,6 @@
     - Clip factor `c=0.005`
     - Length of back price window `M=60`
     - Return period `N=60`
-    - split = '2016-06-13'
 - Trading
     - Uncertainty tolerance
     - Fund partition (spending scheme)

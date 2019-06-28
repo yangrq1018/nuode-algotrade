@@ -4,22 +4,17 @@
 #  mailto: yangrq@connect.hku.hk
 #  This file is part of the quantitative research of Nuode Fund, contact
 #  service@nuodefund.com for commercial use.
-
-from model import prepare_model
 from chip import CDS
-from utils import Parameters, fp
-import matplotlib.pyplot as plt
+from model import prepare_model
 from mpl_toolkits.mplot3d import Axes3D
-import matplotlib as mpl
-
-# mpl.rcParams['figure.dpi'] = 200
-# plt.style.use('seaborn')
+import matplotlib.pyplot as plt
+from utils import fp, Parameters
 
 
 
 clf, X_test, y_test = prepare_model(CDS.from_ticker('IF'), '2016-06-13', **Parameters.standard)
 
-for case in ['预测']:
+for case in ['实际', '预测']:
     prediction = clf.predict(X_test)
 
     if case == '实际':
@@ -51,7 +46,4 @@ for case in ['预测']:
     ax.view_init(elev=12, azim=90)
     fig.show()
 
-    # fig2 = plt.figure()
-
-# cds = CDS.from_ticker('IF')
-# cds.plot_dist('2018-04-17', 0.005, aggregate=True, bin_size=10)
+    fig2 = plt.figure()

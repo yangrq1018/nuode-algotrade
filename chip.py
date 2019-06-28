@@ -132,9 +132,7 @@ class CDS:
 
         # Add that day's price as cut off
         plt.axhline(y=current_price, c='k', ls='--', lw=1.1, label="收盘价")
-
         plt.xlabel('筹码密度', fontproperties=fp)
         plt.ylabel('点数', fontproperties=fp)
         plt.legend(loc='best', prop=fp)
         plt.show()
-        return plt.gca()

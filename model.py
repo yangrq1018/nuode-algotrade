@@ -17,7 +17,7 @@ from chip import CDS
 from utils import neighbor_percentage, kurt, k_day_return_afterward, profit_region, get_dataframe, Parameters
 
 
-def get_model_cds_X_test(split, SI="IF"):
+def get_model_cds_X_test(split, SI, param=Parameters.standard):
     """
     The days before this date are training set
     The days on and after this date are the testing set
@@ -30,7 +30,7 @@ def get_model_cds_X_test(split, SI="IF"):
 
     # Load from pickle instead of retraining
     model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
-                                          evaluate=True, **Parameters.standard)
+                                          evaluate=True, **param)
 
     return model, cds, X_test
 

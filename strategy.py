@@ -7,6 +7,7 @@
 
 
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
@@ -16,15 +17,12 @@ from sklearn import tree
 import matplotlib.ticker as mticker
 import graphviz
 import os
+from itertools import product
 
 from model import get_model_cds_X_test
-from plotting import sample_signals
+from plotting import plot_signal
 from utils import TradingPeriodEnds, annualize, fp, Parameters
 
-mpl.rcParams['figure.dpi'] = 300
-plt.style.use('seaborn')
-
-# Forecast period
 RP = Parameters.standard['return_period']
 
 
@@ -383,8 +381,8 @@ def evaluate(broker, market, cds, split, initial_balance):
     print('赔率\t\t {:.2f}'.format(gain_loss_ratio))
     print('策略夏普比率\t {:.2f}'.format(sr))
     print('标的夏普比率\t {:.2f}'.format(bm_sr))
-    print('{} 头寸 = {}(胜负) + {}(负)'.format(broker.leger['open_close_count'], broker.leger['win_count'],
-                                          broker.leger['loss_count']))
+    print('{} 头寸 = {}(胜) + {}(负)'.format(broker.leger['open_close_count'], broker.leger['win_count'],
+                                         broker.leger['loss_count']))
     print('{} 头寸 = {}(多) + {}(空)'.format(broker.leger['open_close_count'],
                                          len(broker.leger['long'][broker.leger['long'] != 0]),
                                          len(broker.leger['short'][broker.leger['short'] != 0])
@@ -394,14 +392,16 @@ def evaluate(broker, market, cds, split, initial_balance):
             '累计净值': broker.cash_bal / initial_balance,
             '最大回撤': max_drawdown,
             '夏普比率': sr,
-            '头寸数量': broker.leger['open_close_count']
+            '头寸数量': broker.leger['open_close_count'],
+            '收益回撤比': excess_return / (-max_drawdown)
             }
 
 
 def plot_price(cds, ax: plt.Axes, lw=0.95):
     prices = cds.prices[cds.prices.index >= split]
     # ax.xaxis.set_tick_params(rotation=45)
-    ax.plot(prices.index, prices.values, lw=lw, label="价格")
+    ax.plot(prices.index, prices.values, lw=lw, label="点数")
+    ax.legend(loc='upper left', prop=fp)
 
 
 def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_partition, initial_balance, tolerance,
@@ -460,27 +460,29 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         ax.quiver(short_points.index.values, short_points.values - dpc,
                   np.full(len(short_points), 0), np.full(len(short_points), -arrow_length),
                   label="做空", color='g', **param)
-        ax.legend(loc='best', prop=fp)
+        # ax.legend(loc='best', prop=fp)
+        plt.xticks(rotation=45)
 
     if 'acc_return' in show_plot:
         # twinx should distinguish the left axe and the right axe
         ax = plt.subplot(211).twinx()
         acc_return_series_perc = (broker.leger['net_worth'] / broker.init_balance - 1) * 100
-        acc_return_series_perc.plot(ax=ax, label="accumulative return", color='crimson', grid=False)
+        acc_return_series_perc.plot(ax=ax, label="累计收益", color='crimson', grid=False)
         # format right y axis as percentage
         ax.yaxis.set_major_formatter(mticker.PercentFormatter())
-        # ax.legend()
-        # plt.show()
+        ax.legend(prop=fp, loc='lower center')
 
     if 'signal' in show_plot:
-        sample_signals(split, plt.gca(), model, X_test, cds)
+        plot_signal(split, model, X_test, cds, plt.gca())
+        plt.xticks(rotation=30)
 
     if 'long_short_pos' in show_plot:
         l, s = broker.leger['long_pos_profile_s'], broker.leger['short_pos_profile_s']
         ax = plt.subplot(212)
-        ax.stackplot(l.index, l, s, labels=["看多头寸", "看空头寸"])
+        ax.stackplot(l.index, l, s, labels=["多头寸", "空头寸"])
         ax.plot(l.index, l - s, label="净头寸", color='crimson')
         ax.legend(loc='lower left', prop=fp)
+        plt.xticks(rotation=30)
 
     if 'viz_tree' in show_plot:
         print('Visualizing one decision tree')
@@ -507,6 +509,7 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         ax_twin.bar(loss.index, loss, color='green')
         ax_twin.grid(None)
         ax_twin.set_ylim(top=np.nanmax(daily_return) * 8)
+        ax_twin.yaxis.set_ticks([])
         plt.show()
 
     return evaluate(broker, market, cds, split, initial_balance)
@@ -515,12 +518,12 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
 def er_mdd(df):
     fig, ax1 = plt.subplots()
     ax1.plot(df['prob_factor'], df['超额年化收益率'], c='navy', label="超额年化收益率")
-    ax1.set_ylabel('超额年化收益率', fontproperties=fp)
+    ax1.set_ylabel('超额年化收益率(%)', fontproperties=fp)
     ax2 = ax1.twinx()
     ax2.plot(df['prob_factor'], df['最大回撤'], c='tomato', label="最大回撤")
-    ax2.set_ylabel('最大回撤', fontproperties=fp)
+    ax2.set_ylabel('最大回撤(%)', fontproperties=fp)
     ax1.set_xlabel('概率阈值', fontproperties=fp)
-    fig.legend(prop=fp)
+    fig.legend(prop=fp, loc='upper left')
     plt.grid(False)
     plt.show()
 
@@ -532,16 +535,17 @@ if __name__ == '__main__':
     initial_balance = 10000
     prob_tol_factor = 0.8
 
-    simulate_strategy(*get_model_cds_X_test(split, SI="IF"), split, fund_partition, initial_balance, prob_tol_factor,
-                      show_plot=['price', 'in_out', 'long_short_pos', 'acc_return', 'daily_return'])
+    # simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
+    #                   show_plot=['price', 'signal'])
 
-    # simulate_strategy(*get_model_cds_X_test(split), split, fund_partition, initial_balance, prob_tol_factor,
-    #                   show_plot=['viz_tree'])
+    # simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
+    #                   show_plot=['price', 'in_out', 'acc_return', 'long_short_pos', 'daily_return'])
+
 
     # env = get_model_cds_X_test(split, SI="IF")
     #
     # df = []
-    # for prob_tol_factor in np.linspace(0.3, 1.0, 8):
+    # for prob_tol_factor in np.linspace(0.3, 1.0, 15):
     #
     #     d = simulate_strategy(*env, split, fund_partition, initial_balance, prob_tol_factor)
     #     d['prob_factor'] = prob_tol_factor
@@ -553,3 +557,28 @@ if __name__ == '__main__':
     # er_mdd(df)
 
     # ax = sample_signals('2016-06-13', 'IF')
+
+    X = []
+    Y = []
+    Z = []
+    for (c, M) in product(np.linspace(0.001, 0.01, num=10), np.arange(10, 110, 10)):
+        X.append(c)
+        Y.append(M)
+
+        base_param = Parameters.standard
+        base_param['clipping_factor'] = c
+        base_param['back_price_window'] = M
+        print(base_param)
+        env = get_model_cds_X_test(split, SI="IF", param=base_param)
+        d = simulate_strategy(*env, split, fund_partition, initial_balance, prob_tol_factor)
+        z = d['收益回撤比']
+        Z.append(z)
+    df = pd.DataFrame(zip(X, Y, Z))
+    df.to_csv('result.csv')
+
+    ax = plt.subplot(111, projection="3d")
+    ax.plot_trisurf(X, Y, Z, cmap=plt.cm.CMRmap)
+    ax.set_xlabel('预处理参数', fontproperties=fp)
+    ax.set_ylabel('回溯窗口参数', fontproperties=fp)
+    ax.set_zlabel('收益回撤比率', fontproperties=fp)
+    plt.show()
