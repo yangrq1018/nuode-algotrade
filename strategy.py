@@ -535,8 +535,8 @@ if __name__ == '__main__':
     initial_balance = 10000
     prob_tol_factor = 0.8
 
-    # simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
-    #                   show_plot=['price', 'signal'])
+    simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
+                      show_plot=['price', 'signal'])
 
     # simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
     #                   show_plot=['price', 'in_out', 'acc_return', 'long_short_pos', 'daily_return'])
@@ -558,27 +558,27 @@ if __name__ == '__main__':
 
     # ax = sample_signals('2016-06-13', 'IF')
 
-    X = []
-    Y = []
-    Z = []
-    for (c, M) in product(np.linspace(0.001, 0.01, num=10), np.arange(10, 110, 10)):
-        X.append(c)
-        Y.append(M)
-
-        base_param = Parameters.standard
-        base_param['clipping_factor'] = c
-        base_param['back_price_window'] = M
-        print(base_param)
-        env = get_model_cds_X_test(split, SI="IF", param=base_param)
-        d = simulate_strategy(*env, split, fund_partition, initial_balance, prob_tol_factor)
-        z = d['收益回撤比']
-        Z.append(z)
-    df = pd.DataFrame(zip(X, Y, Z))
-    df.to_csv('result.csv')
-
-    ax = plt.subplot(111, projection="3d")
-    ax.plot_trisurf(X, Y, Z, cmap=plt.cm.CMRmap)
-    ax.set_xlabel('预处理参数', fontproperties=fp)
-    ax.set_ylabel('回溯窗口参数', fontproperties=fp)
-    ax.set_zlabel('收益回撤比率', fontproperties=fp)
-    plt.show()
+    # X = []
+    # Y = []
+    # Z = []
+    # for (c, M) in product(np.linspace(0.001, 0.01, num=10), np.arange(10, 110, 10)):
+    #     X.append(c)
+    #     Y.append(M)
+    #
+    #     base_param = Parameters.standard
+    #     base_param['clipping_factor'] = c
+    #     base_param['back_price_window'] = M
+    #     print(base_param)
+    #     env = get_model_cds_X_test(split, SI="IF", param=base_param)
+    #     d = simulate_strategy(*env, split, fund_partition, initial_balance, prob_tol_factor)
+    #     z = d['收益回撤比']
+    #     Z.append(z)
+    # df = pd.DataFrame(zip(X, Y, Z))
+    # df.to_csv('result.csv')
+    #
+    # ax = plt.subplot(111, projection="3d")
+    # ax.plot_trisurf(X, Y, Z, cmap=plt.cm.CMRmap)
+    # ax.set_xlabel('预处理参数', fontproperties=fp)
+    # ax.set_ylabel('回溯窗口参数', fontproperties=fp)
+    # ax.set_zlabel('收益回撤比率', fontproperties=fp)
+    # plt.show()

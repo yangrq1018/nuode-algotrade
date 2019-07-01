@@ -159,7 +159,7 @@ def prepare_model(cds, split_date, pkl_file=None, load_from_disk=False,
         accuracy_s = accuracy_score(y_test.values, model.predict(X_test.values))
         print('----->  accuracy score:', accuracy_s)
         # Classification report
-        print(classification_report(y_test, model.predict(X_test), target_names=['跌', '涨']))
+        print(classification_report(y_test, model.predict(X_test), digits=4, target_names=['跌', '涨']))
         print('实际')
         print(len(y_test[y_test == 1]), len(y_test[y_test == 0]))
         print('预测')
