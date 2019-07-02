@@ -22,6 +22,7 @@ from itertools import product
 from model import get_model_cds_X_test
 from plotting import plot_signal
 from utils import TradingPeriodEnds, annualize, fp, Parameters
+from model import get_model_cds_X_test
 
 RP = Parameters.standard['return_period']
 
@@ -141,7 +142,7 @@ class Broker:
         # https://cn.investing.com/rates-bonds/china-10-year-bond-yield
 
         self._time_axis = time_axis
-        self.init_balance = initial_balance
+        self.init_balance = init_balance
 
         self.cash_bal = init_balance
         self.short_proceed = 0  # short share proceed account
@@ -397,7 +398,7 @@ def evaluate(broker, market, cds, split, initial_balance):
             }
 
 
-def plot_price(cds, ax: plt.Axes, lw=0.95):
+def plot_price(cds, ax: plt.Axes, split, lw=0.95):
     prices = cds.prices[cds.prices.index >= split]
     # ax.xaxis.set_tick_params(rotation=45)
     ax.plot(prices.index, prices.values, lw=lw, label="点数")
@@ -405,7 +406,7 @@ def plot_price(cds, ax: plt.Axes, lw=0.95):
 
 
 def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_partition, initial_balance, tolerance,
-                      show_plot=[]):
+                      show_plot=[], ax=None, plt_show=True):
     """
 
     :param model:
@@ -439,7 +440,10 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
             ax = plt.subplot(211)
             plot_price(cds, ax)
         else:
-            plot_price(cds, plt.gca())
+            if ax:
+                plot_price(cds, ax, split=split)
+            else:
+                plot_price(cds, plt.gca(), split=split)
 
     if 'in_out' in show_plot:
         ax = plt.subplot(211)
@@ -473,7 +477,11 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         ax.legend(prop=fp, loc='lower center')
 
     if 'signal' in show_plot:
-        plot_signal(split, model, X_test, cds, plt.gca())
+        if ax:
+            plot_signal(split, model, X_test, cds, ax)
+        else:
+            plot_signal(split, model, X_test, cds, plt.gca())
+
         plt.xticks(rotation=30)
 
     if 'long_short_pos' in show_plot:
@@ -491,7 +499,8 @@ def simulate_strategy(model: RandomForestClassifier, cds, X_test, split, fund_pa
         graph = graphviz.Source(dot_data)
         graph.render('sample_tree', directory='report' + os.sep + 'figure')
 
-    plt.show()
+    if plt_show:
+        plt.show()
 
     if 'daily_return' in show_plot:
         # Daily return
@@ -535,7 +544,7 @@ if __name__ == '__main__':
     initial_balance = 10000
     prob_tol_factor = 0.8
 
-    simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
+    simulate_strategy(*get_model_cds_X_test(split, SI='IC'), split, fund_partition, initial_balance, prob_tol_factor,
                       show_plot=['price', 'signal'])
 
     # simulate_strategy(*get_model_cds_X_test(split, SI='IF'), split, fund_partition, initial_balance, prob_tol_factor,
