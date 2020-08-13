@@ -29,7 +29,7 @@ def get_model_cds_X_test(split, SI, param=Parameters.standard):
     cds = CDS(df.index, df.CLOSE, df.TURN, SI)
 
     # Load from pickle instead of retraining
-    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=True,
+    model, X_test, y_test = prepare_model(cds, split_date=split, load_from_disk=False, save_to_disk=False,
                                           evaluate=True, **param)
 
     return model, cds, X_test

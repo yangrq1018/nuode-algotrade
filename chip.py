@@ -125,14 +125,14 @@ class CDS:
 
         profit_percentage = sum(lower_dist.values()) / (sum(upper_dist.values()) + sum(lower_dist.values()))
 
-        plt.barh(*zip(*lower_dist.items()), height=9, color="b", label="获利盘{:.2f}%".format(
+        plt.barh(*zip(*lower_dist.items()), height=9, color="b", label="Area in profit {:.2f}%".format(
             profit_percentage * 100
         ))
         plt.barh(*zip(*upper_dist.items()), height=9, color="y")
 
         # Add that day's price as cut off
-        plt.axhline(y=current_price, c='k', ls='--', lw=1.1, label="收盘价")
-        plt.xlabel('筹码密度', fontproperties=fp)
-        plt.ylabel('点数', fontproperties=fp)
+        plt.axhline(y=current_price, c='k', ls='--', lw=1.1, label="Closing price")
+        plt.xlabel('Density', fontproperties=fp)
+        plt.ylabel('Price/Point', fontproperties=fp)
         plt.legend(loc='best', prop=fp)
         plt.show()

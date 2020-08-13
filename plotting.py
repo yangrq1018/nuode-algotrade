@@ -8,6 +8,7 @@
 import pandas as pd
 
 import matplotlib.pyplot as plt
+from model import CDS
 from model import get_model_cds_X_test
 from utils import fp
 
@@ -37,11 +38,14 @@ def plot_signal(split, model, X_test, cds, ax=None):
         ax = plt.subplot(111)
 
     # You may pass a Series itself to pyplot, it will extract values
-    ax.scatter(ups.index, ups.values, c='r', s=7, alpha=0.7, label="看多信号")
-    ax.scatter(downs.index, downs.values, c='g', s=7, alpha=0.7, label="看空信号")
+    ax.scatter(ups.index, ups.values, c='r', s=7, alpha=0.7, label="PR")
+    ax.scatter(downs.index, downs.values, c='g', s=7, alpha=0.7, label="PF")
     ax.legend(prop=fp)
 
-# cds = CDS.from_ticker('IF')
-# cds.plot_dist('2017-08-18', 0.005, aggregate=True, bin_size=10)
-# cds.plot_dist('2016-06-22', 0.005, aggregate=True, bin_size=10)
-# cds.plot_dist('2018-04-17', 0.005, aggregate=True, bin_size=10)
+
+if __name__ == '__main__':
+    cds = CDS.from_ticker('IF')
+    cds.plot_dist('2017-08-18', 0.005, aggregate=True, bin_size=10)
+    # cds.plot_dist('2016-06-22', 0.005, aggregate=True, bin_size=10)
+    # cds.plot_dist('2018-04-17', 0.005, aggregate=True, bin_size=10)
+
